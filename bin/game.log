@@ -1,0 +1,8 @@
+Dec 24 13:24:26 
+TetriNET for Linux V1.13.16
+---------------------------------
+Dec 24 13:24:26 No game definitions found. Creating game.conf file with defaults.
+Dec 24 13:24:26 Wrote new game configuration to game.conf
+Dec 24 13:24:26 Listening at telnet port 31457, on socket 3, bound to 0.0.0.0
+Dec 24 13:24:26 Wrote new security configuration to game.secure
+Dec 24 13:24:28 Got TERM Signal - Quitting

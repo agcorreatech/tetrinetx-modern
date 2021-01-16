@@ -1,0 +1,25 @@
+Contributions Directory
+-----------------------
+
+
+
+Overview
+--------
+All programs which in someway interact with the TetriNET server are
+put under this directory. 
+This file contains brief descriptions of what each program does, and
+who sent it in. If you want to provide a fuller description, then please
+do email me it :)
+
+
+
+Programs
+--------
+
+* contrib/query 	(dds - 13/10/98)
+	This program connects to the query port of TetriNET servers
+	(introduced in Build 11 onwards), and allows a person to
+	query various stats of people logged in, and to be able to
+	kick any of those people off.
+
+

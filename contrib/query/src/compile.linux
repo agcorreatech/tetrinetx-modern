@@ -1,0 +1,3 @@
+#!/bin/sh
+echo [Linux] Compiling Query Client [../bin/query.linux]
+gcc -O2 -fno-strength-reduce -Wall query.c -o ../bin/query.linux $1 $2 $3

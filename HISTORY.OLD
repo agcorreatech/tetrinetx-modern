@@ -1,0 +1,456 @@
+Read the HISTORY file. It's the closest thing to documentation I've got so
+far, AND it has comments on installation for each version.
+
+Sorry, I'll get around the documenting one day, I'm just a little busy at
+the moment :(
+
+Please, if you have a unix other than linux, I would greatly appreciate it
+if you could compile the server, and email me the binary file so I can put
+it in the bin directory...
+
+Bundaberg.
+
+-------------------------------------------------------
+History of TetriNET SERVER for Linux Major Version 1.13
+-------------------------------------------------------
+
+Overview
+--------
+First, the way I version number TetriNET-x, is to add a build number
+to the end of the TetriNET version number. IE: Build 4 becomes
+version 1.13.04.
+
+This document briefly covers what changes have been made in each build
+(and since I've only started doing this from about build 5, don't expect
+details from before ;). I will also include any names of people who have
+a suggestion for an addon, or patch, or bugreport etc... 
+
+Version 1.13.16 (Build 16)
+--------------------------
+Comments:
+	Treat this as just a version of bug fixes :)
+Changes:
+	* Added better logging
+		More logging added, and it's easier to understand.
+	* Eradicated coredump on timeout
+	* Changed /Priority
+		Now if you give a channel a priority of 0, no-one will
+		autojoin it.
+	* Fixed bug, when play
+	* Fixed SuddenDeath Addlines
+		Ok, my addlines didn't look proffesional :). Now it
+		just adds lines to you, and doesn't say ANYTHING in the
+		information window. Yep, iAM informed me that TetriNET
+		for Win95 already had the feature, so I didn't need
+		to recreate it, thank heavens, since having a line
+		added to you from <blank> looks pretty suspicious.
+	* FIXED a bug that used up file handles
+		game.motd was being opened and never closed. Eventually
+		the server is killed due to lack of filehandles, or
+		is hard to log into. Damn this was a bastard to find :P.
+	* IP column to /who  (Suggestion by Hinder - 1/1/1999)
+		If you are an authenticated OP, and type /who,
+		there is an additional column, IP, which shows each
+		players IP. This is added in, with a /ban keyword
+		in mind for a future version (hopefully the next).
+
+
+
+
+
+Version 1.13.15 (Build 15)
+--------------------------
+Comments:
+	Found a few small bugs in Build 14, so I fixed them, plus I've
+	decided to be daring and remove as many of the large loops in the
+	server as I can, since it's chewing CPU time. So now people are
+	grouped by channels instead of in one huge big list, which really
+	makes much more sense.
+Changes:
+	* Fixed wierd bug
+		Commented out about 30 lines of code. What THE HELL was
+		that doing there :). Should clear a few bugs.
+	* Group Network sockets by Channels
+		Eradicate long loops and program overhead
+	* Fixed preset channels
+		A small bug in Build 14 made preset channels disapear.
+		FIXED!
+
+
+
+Version 1.13.14 (Build 14)
+--------------------------
+Comments:
+	I have discovered something. I program as a kind of stress relief.
+	During my most happiest days in my life, the last 3 months :), I've
+	programmed just about zilch. Now that I'm getting extemely worried
+	about things, IE, very worried for my beautiful girlfriend, who
+	has certainly changed my life, I program, and boy do I. Many MANY
+	changes in this version. Ok, probably not very interesting 
+	information to you, but if a physcologist happens to read this,
+	who knows :P
+Changes:
+	* MORE bug fixes. Oh hell, someone kill me.
+	* SUDDENDEATH mode  (So many people requested this)
+		After a set number of seconds, the game can go into
+		suddendeath, where lines start being added to everyones
+		screen.
+	* Persistant channels (Requested by so many people)
+		You can now create preset channels in game.conf, AND
+		you can even on the tetrinet game, make certain channels
+		persistant. Added the following commands:
+			- /persistant <0/1>
+				Make a channel persistant
+			- /save
+				SAVE persistant channels and info
+				to game.conf. Reasonably intelligent.
+			- /reset
+				LOAD all configuration from game.conf
+	* Updated logging
+		New game.conf tag:  verbose. Setting a value to this
+		from 0-10, sets how verbose the log is. A good setting
+		is 4. An extremely noisy setting is 10.
+	* /SET command
+		Added a new TetriNET command. /Set.
+		Type /set help   to find out what options there are.
+		/Set allows you to set the type of configuration, like
+		percentage of block types on a per channel basis.
+		If you get a channel just the way you want, AND you
+		own the server, AND you want to keep that channel for
+		future use. Just go /persistant  to make it persistant, and
+		then /save  to save it :). Saves having to try create
+		the info manually in game.conf.
+
+
+Version 1.13.13 (Build 13)
+--------------------------
+Comments:
+	My last version was to put it plainly and very very nicely, 
+	horribly horribly buggy. I'm hoping I've managed to quash
+	every one of those extemely annoying and frustrating bugs.
+	Introducing channels caused a LOT of problems. However,
+	things should be ok now.
+Changes:
+	* Bug files galore   (Too many to list)
+	* Update network engine
+		I found the eggdrop code I originally used a little
+		bit limiting. So I've heavily modified it to provide
+		full dynamic allocation of resources. This should
+		save a stack of memory. Next version, I'll
+		erradicate the many many loops.
+
+
+Version 1.13.12 (Build 12)
+--------------------------
+Comments:
+	Quite a radical change in this one. Introduction of an IRC type
+	channel structure, to allow really powerful servers to run
+	multiple "virtual" tetrinet servers on the same port :) and IP.
+Changes:
+	* Fixed up uninitilisation bugs
+		WOW, going through my code, I found so many places where
+		I simply did not initialize important variable because
+		I'd added them at a later date, and forgot to add
+		that in. How the previous versions worked, escapes me ;)
+	* Channel structure (Combined discussion anut, rainbrot, me)
+		Redesign the server to allow channels or "virtual" servers.
+		Essentially, when the server is configured to allow more
+		than just one channel, players may "/join" other channels,
+		and play on them, just as if they were seperate servers.
+		Also, When one channel fulls up, new players overflow to
+		new channels...
+	* Binding to IP's (Suggestion by [Op] - 2/11/98)
+		Before, the server listened to ALL IP's on the system.
+		If you want to run a seperate server on seperate IP's, then
+		you can now bind the server to specific IP's. Edit
+		game.conf and modify "bindip", and change it from 0.0.0.0
+		(All IP's), to that specific IP. Then you can run multiple
+		instances of the tetrinet server, if and only if they bind
+		to different IP's (and thus have different game.conf files).
+	* Added built-in commands:
+			- /join <#channelname|number>
+			    Join or create a new virtual channel.
+			- /list
+			    List all virtual channels on the server.
+			- /priority <Channel priority (1-99)>
+			    Change channel priority. When a new player
+			    connects to the server, they join the lowest
+			    priority channel that is not full.
+			- /topic <channel topic>
+			    Change topic of channel, showed in /list
+			- /who
+			    Show ALL logged in players, and what channel
+			    they are in.
+	* Added game.conf entries:
+			- bindip [0.0.0.0]
+			    What IP to bind server to, or ALL (0.0.0.0)
+			- maxchannels [1]
+			    How many virtual channels the server will
+			    allow. The default 1, means no other channels
+			    are available. You probably want to change this.
+			- command_join
+			- command_list
+			- command_priority
+			- command_topic
+			- commant_who
+			    Permissions to use these commands.
+	
+
+Version 1.13.11 (Build 11)
+--------------------------
+Comments:
+	Geez, I seem to be making new builds daily :) I had to rush this
+	one out, because of one incredibly serious flaw in Build 10 that
+	I introduced by mistake. It didn't have a limit on the number of
+	players allowed to connect, and as soon as 7 players connect, havoc
+	reigns. Fixed phew.
+Changes:
+	* Fixed max number of players
+	* Supports AdvancedQuery standard (Added by dds - 13/10/98)
+		Port 31456 allows the following advanced queries to
+		be sent to it:
+			- securequery server_password
+			    Gives back <gameslot> <nick> <team> <host>
+			    of each logged in player.
+			- killplayer server_password gameslot
+			    Kicks the player occupying gameslot off server.
+		All the query code was sent in by dds.
+	* Fixed "playerquery" to count people waiting for teams as well
+		Whoops, forgot them, not that it would affect many servers.
+	* Introduced timeout variables in game.conf
+		Two new tags in game.conf introduced:
+			- timeout_ingame    [60]
+			- timeout_outgame   [1200]
+		They are the number of seconds of no activity before a
+		player is considered timed out, and dropped, when a person
+		is playing a game and when they are not. Note that during
+		a game, because the fields should update at most intervals
+		of 30seconds, the timeout for that should be much less,
+		then for when no game is player, when people do just
+		tend to sit there quietly (but not surely for 1200 seconds:)
+
+
+
+Version 1.13.10 (Build 10)
+--------------------------
+Changes:
+	* Introduced timeouts	(Suggestion by crazor - 17/9/98)
+		If no activity from a player, they are eventually
+		disconnected from the game.
+	* Updated playerquery	(Suggestion by dds - 12/9/98)
+		Now returns a more accurate figure for number of logged
+		in players, since it now ONLY counts players that
+		are properly logged in, NOT ghost connections.
+	* Updated /msg /kick etc (Suggestion by iAM - 8/10/98)
+		Now, /msg etc... take for the playernumber argument
+		multiple playernumbers... IE: To msg players 2,3,5, you'd
+		write "/msg 235 My message". To kick players 1 and 6, you'd
+		write "/kick 16 My message" 
+	* Fixed Winlist under TetriNET
+		I noticed that when someone has colour in their nicks,
+		and they get onto the winlist, then if the server sends
+		their nick _in colour_ to TetriNET client winlist, the
+		next time that person starts TetriNET client, it crashes.
+		Colour is now stripped out of the data sent to TetriNET
+		client winlist now.
+	* Added security levels (Suggestion by dds - 11/10/98)
+		dds suggested that I introduce a way to prevent /kicks or 
+		/clears from being done by any player who just happens
+		to get op. So I've introduced security levels. The game.conf
+		options "command_<command>=number", has now been modified
+		so that you can have number to be one of the following:
+			0: disabled (IE:command_kick=0)
+			1: anyone can use (IE:command_winlist=1)
+			2: OP by position can use (IE:command_kick=2)
+			3: OP by "/op" can use (IE:command_clear=3)
+		This is so you can configure your server so that some
+		rogue person who happens to get position #1 can't say
+		/clear your winlist on a ladder server :P
+
+Version 1.13.09 (Build 09)
+--------------------------
+Changes:
+	* Added tags to game.conf to allow more customization
+		stripcolour		(Strip colour in gmsg's)
+		serverannounce		(Server announces winner?)
+		pingintercept		(Intercept Pings?)
+		command_kick		(Allow /kick?)
+		command_msg		(Allow /msg?)
+		command_op		(Allow /op?)
+		command_winlist		(Allow /winlist?)
+		command_help		(Allow /help?)
+		command_clear		(Allow /clear?)
+	* Patched /op command
+		Doesn't allow /op command while game is going :).
+
+
+
+
+
+Version 1.13.08 (Build 08)
+--------------------------
+Comments:
+	Been about 2 or 3 weeks since I've worked on this, and for the
+	simple reason that I've completely head over heels fallen in
+	love :-). But I'm back onto it. Thanks for all those really
+	nice emails that came in.
+
+Changes:
+	* Check for invalid winlist files.
+		If a winlist file is in the wrong format (Say from a
+		previous version) it is reset. Is there much need for
+		backwards compatibility here?
+	* Updated security
+		I knew I'd find some. Buffer overruns. Fixed.
+	* Updated /help
+		Now includes help on the new /msg, /winlist. Also looks
+		prettier ;)
+	* Added /op keyword (Suggestion by (jawfx@hotmail.com 21/9/98))
+		I've added some security functions as well, by popular
+		request.
+		In game.secure, if you uncomment the "op_password" tag
+		and put a password there, then if a player types
+		"/op <password>", where <password> is what is given
+		in the game.secure file, then that player will swap
+		places with the OP player. Yes, it works :)
+		If you don't have a game.secure file, then run the server
+		and it will automatically create one for you. Default's
+		to no password, which disables this feature.
+	* Made the colour stripping in gmsg less strict
+		Now only strips exact colour codes, not characters below
+		ascii 32
+	* Added /clear keyword (Suggestion by n|ck 6/10/98)
+		When the OP types /clear, the server will clear
+		it's internal winlist, and update all the clients.
+		
+
+
+
+ 
+
+Version 1.13.07 (Build 07)
+--------------------------
+Comments:
+	Oh geez, what a list of bugs ;). I've still not fixed some, but 
+	as soon as I trace what they are, we'll see what can be done.
+	Please NOTE: This version uses a different format WINLIST file, and
+	has an extra option in the game.conf file. You will definately
+	have to delete "game.winlist", and you may want to delete
+	"game.conf" file. Yeah, I should have a mechanism that detects
+	corrupt winlist files... I will next version ;), otherwise
+	TetriNET client literally shits itself when funny winlist values
+	come through. Don't blame it either.
+
+Changes:
+	* Fixed Winlist score.  (dds reported it 18/9/98)
+		Fixed a silly error where I used signed numbers for
+		the winlist score, and thus -1 became some ridiculously
+		large number.
+	* Fixed TET_DEBUG entries in code
+	* Added "/winlist xx" to partyline (crazor 17/9/98)
+		If a person type "/winlist xx", where xx is the number of
+		winlist entries they want to display, then a rank
+		of the top xx entries are displayed, with the players
+		own team and player name highlighted in red.
+	* Added "/msg <playernum> <message>" (crazor 17/9/98)
+		Added a rather crude way to privately message someone
+		else in the party line. Crude in that the client
+		does not handle it too well, but hey, it works :)
+	* Added Hotswap of game.conf and game.winlist (crazor 17/9/98)
+		Before every game, the game config and winlist are re-read
+		so that if they are modified, the server does NOT have
+		to restart.
+	* Fixed Field Updating incorrectly on-join (iAM 17/9/98)
+		What a stupid error to make. Took me ages to trace it down.
+	* Added PID file (jawfx@hotmail.com - Ken Iverson 21/9/98)
+		Added open "pidfile" to game.conf. The server now writes
+		its PID to this file.
+
+
+
+
+Version 1.13.06 (Build #6)
+--------------------------
+Changes:
+	* Better handling of what to do when a player quits.
+		In previous versions, when a currently playing player
+		leaves, my server didn't do a good enough job
+		of checking to see if only 1 team or 1 player was
+		left playing. Now it should stop the game and 
+		add score to the winners properly.
+	* Modified "playerquery\xff" to "playerquery\n"
+		I thought that if you sent "playerquery\xff" to a real
+		TetriNET server it would be treated as junk and ignored.
+		However, it is interpreted and crashes it, so I've
+		changed it to "playerquery\n", where \n is newline, which
+		works as it should. What a mistaka to maka.
+	* Removed all snprintf and vsnprintf  (drslum - 17/9/98)
+		For security reasons, I usually use bounds checking
+		functions. drslum has notified me that snprintf does not
+		exist under SUN systems. I now use other methods AND at
+		the same time fixed some small potential buffer over-run
+		problems. I would still not recommend the server be run as
+		root.
+	* Removed Colour VIOLET from being forced before every action.
+		This is due to the fact that TetriNET client actually
+		uses colours like toggles. If the action was already
+		VIOLET, that is, the player had no colour codes in their
+		nick, then it became black. I'll fix this by scanning
+		the nick for colour codes in my next build ;)
+
+Version 1.13.01-1.13.05 (Build #1, #2, #3, #4, #5)
+--------------------------------------------------
+Consider these version as the "undistributed" versions. They were my private
+major changes to the TetriNET server, each time I wanted to add something
+in.
+At this stage, the server behaves and looks from the client exactly like a
+TetriNET Server behaves, with some small exceptions, listed in the
+"Features" section.
+
+Features:
+	* /kick <playernumber>
+		The "op" of the server can now kick players using this
+		keyword in the partyline. Normally, unless YOU are the
+		server, TetriNET won't allow you to kick a player.
+	* PING-PONG in GameMessage
+		I got sick of people filling the game message with "t", to
+		test the speed of the Server. While a completely valid thing
+		to do, sometimes it scrolled important messages away.
+		Now, if a player in a game sends "t" to the game message,
+		the server will reply to them, and only to them "PONG", and
+		not forward the "t" to the other players.
+	* Colour Nicks in Game Message
+		People with color nicks were just about unrecognizable in
+		game messages, because colour is not parsed there by the
+		client. Now if a player has colour codes in their nick, and
+		they send a game message, that message has the colour
+		codes stripped out of the nick portion.
+	* Colour Nicks in Party Line
+		Before every message, a "BLACK" colour code is placed, so
+		that the colour from the nick doesn't reach the line.
+		Before every action, a "VIOLET" colour code is placed, so
+		that the colour from the nick doesn't affect the action.
+	* game.motd
+		When a player connects to the server, if there is a
+		game.motd file, it is sent to them as from "<Server>".
+	* End of game, annouce winner
+		Ever wonder who won? At the end of a game, the "<Server>"
+		will announce the player or team that won.
+	* /help partyline keyword
+		If someone types "/help" in the party line, they get a list
+		of commands that are available, like "/me" and "/kick".
+	* playerquery
+		If a client connects to the Server, and instead of sending
+		their INIT string, sends "playerquery\n", \n is newline 
+			"Number of players logged in: n"
+		Where n is the number of players logged in. This is
+		fully compatible with real TetriNET servers, since they
+		will just disconnect you, whereas mine returns the number
+		of players before disconnecting you.
+	* 100 item winlist
+		Yep, for those incredibly long ladder games, I've extended
+		the winlist to store the top 100 teams/players. Of course
+		only the top 10 are shown in the TetriNET winlist, but
+		now you know you can work you way up :)
+
+

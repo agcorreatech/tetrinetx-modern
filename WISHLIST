@@ -1,0 +1,74 @@
+Wishlist, wants and Suggestions
+-------------------------------
+
+Overview
+--------
+Everything in here are the suggestions that people have made, some of them
+being mine, that might be possible to be added to the Server side of
+TetriNET.
+If you're feeling enterprising, you may want to try tackle the coding of one
+of these yourself, and if you get it right, send it in, and I'll merge it
+with the current distribution.
+
+NOTE: Some of these suggestions are not practical, but I've included them
+anyway ;). By not practical, there is not too much of a need for some, or
+some are simply impossible without modifying the client.
+
+
+The List
+--------
+
+ * Add command /ban, /unban for op to ban IP's from the server.
+	Note, I've hesitated on this since we may not want the op
+	to have _that_ much power.
+
+ * Give back time delays on Pings   (iAM - 17/9/98)
+
+ * Have timeouts (crazor - 17/9/98)
+	Timeout on events like field updates etc to detect lagged out
+	people who hold a socket open.
+
+ * Have a server side chat interface (crazor - 17/9/98)
+	Allow someone on the server to be able to interact.
+
+ * Allow the "op" to set a limit to the maximum players (crazor - 17/9/98)
+	If you only want a 4 player game etc.. Also be able to give this
+	info to grav (IE: 2/4 players current on)
+
+ * Allow much more info to be sent to grav (crazor - 17/9/98)
+	The settings of the game etc... Is it classic or not...
+
+ * Plain Text Winlist file (jawfx@hotmail.com 21/9/98)
+	Excellent idea. This allows a person to write the winlist to
+	their local webpage. Because my server stores the top 100 players
+	this can show ALL top 100 players :). What format should the
+	file be written? How much info would a person want? (IE: Last
+	date team/player played... average score... level reached...)
+
+ * Allow OP to change player parameters (fade 23/9/98)
+
+ * Implement a few "SERVER" commands  (Bundaberg 6/10/98)
+	Add a few SERVER commands to the protocol, and build perhaps a
+	windows client that allows the game configuration to be changed AND
+	for the server to be able to moderate the server.
+
+ * Extend /msg to allow 123 to message players 1 2 and 3 etc (iAM 8/10/98)
+	iAM's suggestion was to eliminate /msg, and just be able to have
+	123 as the beginning of a sentance to deliminate a private message.
+	Upon thinking about this though, so many people say things like
+	"123 v 456", which would mean it would be interpreted as a
+	private message to players 1 2 and 3, and they'd get "v 456" ;)
+	It would be nice to get rid of /msg, especially in game messages...
+
+ * Extend "playerquery"        (NuKMan 9/10/98)
+        Either extend "playerquery" or have a new init command which
+        can provide the following information to the listbot:
+                - Maximum number of players
+                - Number of logged in players
+                - Winlist
+
+ * Add /whosi		(dds 11/10/98)
+ * Have a secureop game options (dds 11/10/98)
+	If this is set, then a person MUST use /op command and have a valid
+	password to be able to use the /kick, /clear commands...
+
