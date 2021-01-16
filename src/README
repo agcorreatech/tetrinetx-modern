@@ -1,0 +1,16 @@
+TetriNET X Modern
+
+This project is an update of the classic tetrinetx server to be
+supported by new linux distributions and C compiler versions.
+
+The job is basically review the code and replace the old varargs.h
+to stdarg.h and some bug fixes.
+
+This code was built using Ubuntu 20.04.1 LTS and it was developed
+using Visual Studio Code running in Windows 10, integrated with
+WSL (Windows Subsystem for Linux) to compile and run the code
+in the native environment.
+
+This job is under progress and it is beign done by
+Alexandro Corrêa <alex.linux@gmail.com>
+from Porto Alegre, RS, Brazil.
