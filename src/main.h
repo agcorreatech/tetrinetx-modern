@@ -24,7 +24,7 @@
 #endif
 #endif           /* but virtually every other OS NEEDS both */
 #include <arpa/inet.h>      /* is this really necessary? */
-#include <stdarg.h> /* ALEX - 16-01-2020 - replaces varargs.h */
+#include <stdarg.h>
 #include <errno.h>
 #if HAVE_UNISTD_H
 #include <unistd.h>
@@ -296,5 +296,5 @@ void lostnet(struct net_t *n);
 void net_connected(struct net_t *n, char *buf);
 void net_waitingforteam(struct net_t *n, char *buf);
 void init_main(void);
-void lprintf();
-void lvprintf();
+void lprintf(char *format,...);
+void lvprintf(int priority, char *format,...);

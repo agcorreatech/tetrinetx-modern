@@ -75,7 +75,11 @@
     it to the main distribution.
     
    
-*/""
+*/
+   
+   
+ 
+   
 
 /*undef TETDEBUG*/		/* Every time I find I need a printf, I'll encase it as a debug */
 
@@ -315,10 +319,12 @@ int tet_checkversion(char *buf)
 
 /* lvprintf( priority, same as printf ) - Logs to the log IF priority is smaller */
 /*                                        or equal to game.verbose */
-void lvprintf(va_alist)
+// Example: lvprintf(9,"%s: Disconnected due to failed decryption: %s\n",n->host,buf);
+
+void lvprintf(int priority, char *format,...)
 { /* No bounds checking. Be very careful what you log */
-  char *format; va_list va; static char SBUF2[768];int priority;
-  priority=va_arg(va,int);format=va_arg(va,char *);
+  va_list va; static char SBUF2[768];
+  va_start(va,format);
   vsprintf(SBUF2,format,va);
   if (strlen(SBUF2)>512)
     {
@@ -332,14 +338,14 @@ void lvprintf(va_alist)
 }
 
 /* lprintf( same as printf ) - Logs to the log. */
-void lprintf(va_alist)
+void lprintf(char *format,...)
 { /* No bounds checking. Be very careful what you log */
-  char *format; va_list va; static char SBUF2[768];
+  va_list va; static char SBUF2[768];
   FILE *file_out;
   char *mytime;
   char *P;
   time_t cur_time;
-  format=va_arg(va,char *);
+  va_start(va,format);
   vsprintf(SBUF2,format,va);
   if (strlen(SBUF2)>512)
     {

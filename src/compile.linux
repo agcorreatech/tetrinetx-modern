@@ -1,3 +1,5 @@
 #!/bin/sh
-echo [Linux] Compiling TetriNET Server [../bin/tetrix.linux]
-gcc -O2 -fno-strength-reduce -Wall main.c -o ../bin/tetrix.linux $1 $2 $3
+echo
+echo [Linux] Compiling TetriNET X Modern Server [../bin/tetrix-modern.linux]
+echo
+gcc -O2 -fno-strength-reduce -Wall main.c -o ../bin/tetrix-modern.linux $1 $2 $3

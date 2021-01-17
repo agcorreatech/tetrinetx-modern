@@ -537,19 +537,22 @@ void dequeue_sockets()
    pointer, precede with a socket number */
 /* please stop using this one except for server output.  dcc output
    should now use dprintf(idx,"format",[params]);   */
-void tprintf(va_alist)
+// tprintf(n->sock,"pline 0 %c/set %cBLOCK %cll lz sq rl rz hc ln   %cSet Block Configuration\xff", BLUE,RED,BLUE,NAVY);
+void tprintf(int sock, char *format, ...)
 {
-  char *format; int sock; va_list va; static char SBUF2[1050];
-  sock=va_arg(va,int); format=va_arg(va,char *);
+  va_list va; static char SBUF2[1050];
+  
+  va_start(va,format);
+  
   vsprintf(SBUF2,format,va);
   if (strlen(SBUF2)>1022)
  {  
     SBUF2[1022]=0;   /* server can only take so much */
  }
-  tputs(sock,SBUF2);    
+  tputs(sock,SBUF2);
   if (strlen(SBUF2) > 3) lvprintf(10,"Tprintf(%d): %s\n", sock, SBUF2);
+  va_end(va);
 } 
-
 
 IP getip(char *s)
 {

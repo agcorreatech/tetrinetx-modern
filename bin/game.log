@@ -6,3 +6,14 @@ Dec 24 13:24:26 Wrote new game configuration to game.conf
 Dec 24 13:24:26 Listening at telnet port 31457, on socket 3, bound to 0.0.0.0
 Dec 24 13:24:26 Wrote new security configuration to game.secure
 Dec 24 13:24:28 Got TERM Signal - Quitting
+Jan 17 15:24:46 
+TetriNET for Linux V1.13.16
+---------------------------------
+Jan 17 15:24:46 Read game configuration from game.conf
+Jan 17 15:24:46 Listening at telnet port 31457, on socket 3, bound to 0.0.0.0
+Jan 17 15:24:46 Read security configuration from game.secure
+Jan 17 15:28:18 #tetrinet-VirtualBoy[KT] New connection
+Jan 17 15:28:25 #tetrinet-VirtualBoy[KT] started the game
+Jan 17 15:30:39 #tetrinet-VirtualBoy[KT] stopped the game
+Jan 17 15:30:45 #tetrinet-VirtualBoy[KT] Lost telnet connection from HORNET.mshome.net
+Jan 17 15:31:05 Got TERM Signal - Quitting
