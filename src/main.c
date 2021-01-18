@@ -560,7 +560,7 @@ int strclen(char *S)
 void net_connected(struct net_t *n, char *buf)
   {
     char COMMAND[101]; char PARAM[601]; char MSG[601];
-    char STRG[513], STRG2[513];
+    char STRG[513], STRG2[513], STRG3[80];
     int num; int num1; int num2; int num3; int num4; int s; int i,j,k,l,x,y;
     int nn1,nn2,nn3,nn4,nn5,nn6,nn7,nn8,nn9;
     int valid_param;
@@ -756,10 +756,10 @@ void net_connected(struct net_t *n, char *buf)
                         else if ( !strcasecmp(STRG,"SUDDENDEATHMSG") )
                           {
                             k=0;
-                            k=sscanf(PARAM,"%512[^\n]",STRG2);
+                            k=sscanf(PARAM,"%512[^\n]",STRG3);
                             if (k==1)
                               {
-                                strncpy(n->channel->sd_message,STRG2,SDMSGLEN);n->channel->sd_message[SDMSGLEN-1]=0;
+                                strncpy(n->channel->sd_message,STRG3,SDMSGLEN);n->channel->sd_message[SDMSGLEN-1]=0;
                                 tprintf(n->sock,"pline 0 %cSettings Updated!\xff",NAVY);
                               }
                             else if (strlen(PARAM)==0)
@@ -2320,7 +2320,10 @@ void net_waitingforteam(struct net_t *n, char *buf)
       {/* Exists, so send it to the player */
         while (!feof(file_in))
           {
-            fscanf(file_in,"%1023[^\n]\n", strg);
+            if(fscanf(file_in,"%1023[^\n]\n", strg) != 1)
+            {
+              printf("Error: Failed to read MOTD file: %s.\n",FILE_MOTD);
+            }
             tprintf(n->sock,"pline 0 %s\xff", strg);
           }
         fclose(file_in);
@@ -2460,7 +2463,7 @@ void net_telnet_init(struct net_t *n, char *buf)
     /* Winlist - Returns Winlist */
     if (!strcasecmp(buf,"getwinlist"))
       {
-        lvprintf("%s: GetWinlist request\n",n->host);
+        lvprintf(4,"%s: GetWinlist request\n",n->host);
         for(i=0;i<MAXWINLIST;i++)
           {
             if(winlist[i].inuse)

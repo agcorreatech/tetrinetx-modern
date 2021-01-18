@@ -51,7 +51,10 @@ int securityread(void)
       
     while(!feof(file_in))
       {
-        fscanf(file_in," %512[^\n]\n", buf);
+        if(fscanf(file_in," %512[^\n]\n", buf) != 1)
+        {
+          printf("Error: Failed to read security file: %s.\n",FILE_SECURE);
+        }
         
         i=0; j=strlen(buf);
         while( (i<j) && (buf[i]!='#') ) i++;
@@ -314,8 +317,10 @@ int gameread(void)
       
     while(!feof(file_in))
       {
-        fscanf(file_in," %512[^\n]\n", buf);
-        
+        if(fscanf(file_in," %512[^\n]\n", buf) != 1)
+        {
+          printf("Error: Failed to read config file: %s.\n",FILE_CONF);
+        }        
         i=0; j=strlen(buf);
         while( (i<j) && (buf[i]!='#') ) i++;
         if (buf[i]=='#') buf[i] = '\0'; /* Truncate string to # char */
@@ -936,7 +941,10 @@ void readwinlist(void)
     
     for(i=0;i<MAXWINLIST;i++)
       {
-        fread(&winlist[i], sizeof(struct winlist_t), 1, file_in);
+        if(fread(&winlist[i], sizeof(struct winlist_t), 1, file_in) != 1)
+        {
+          printf("Error: Failed to read winlist file: %s.\n",FILE_WINLIST);
+        }
       }
     fclose(file_in);
     

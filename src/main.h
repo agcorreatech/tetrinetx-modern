@@ -45,10 +45,10 @@
 
 /* Defines */
 #define TETVERSION "1.13"		/* What Tetrinet version we are for */
-#define SERVERBUILD "16"		/* What build we are at */
+#define SERVERBUILD "17"		/* What build we are at */
 #define NICKLEN 30			/* Maximum length of Nickname */
 #define VERLEN 10			/* Maximum length of Tetrinet version */
-#define UHOSTLEN 30			/* Maximum length of Hostname */
+#define UHOSTLEN 252			/* Maximum length of Hostname */
 #define TEAMLEN NICKLEN			/* Maximum length of teamname */
 /*#define MAXNET 80*/			/* Maximum network sockets */
 #define MAXWINLIST 100			/* Maximum entries on Winlist */

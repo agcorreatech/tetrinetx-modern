@@ -17,3 +17,12 @@ Jan 17 15:28:25 #tetrinet-VirtualBoy[KT] started the game
 Jan 17 15:30:39 #tetrinet-VirtualBoy[KT] stopped the game
 Jan 17 15:30:45 #tetrinet-VirtualBoy[KT] Lost telnet connection from HORNET.mshome.net
 Jan 17 15:31:05 Got TERM Signal - Quitting
+Jan 18 00:23:39 
+TetriNET for Linux V1.13.17
+---------------------------------
+Jan 18 00:23:39 Read game configuration from game.conf
+Jan 18 00:23:39 Listening at telnet port 31457, on socket 3, bound to 0.0.0.0
+Jan 18 00:23:39 Read security configuration from game.secure
+Jan 18 00:24:15 #tetrinet-VirtualBoy[KT] New connection
+Jan 18 00:25:23 #tetrinet-VirtualBoy[KT] Lost telnet connection from HORNET.mshome.net
+Jan 18 00:25:32 Got TERM Signal - Quitting
