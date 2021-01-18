@@ -1,0 +1,14 @@
+Release 01 - 18/Jan/2020
+
+- Finished the review of the code and replaced the old library varargs.h
+by stdarg.h. The functions lvprintf(), tprintf() and lprintf() was rewritten.
+No more errors, now the code can be compilled with modern GCC versions.
+
+- All returns of the functions fscanf() has been treated as it should be, and
+there is no more warnings about it in the compilation.
+
+- Fixed some bugs with variable formats and type conversions everywhere, that
+was giving warnings in the compilation. Now it's compiling like a charm!
+
+- The code is now full functional and can be used! It is the original version
+of the tetrinetx, but working in 2020!

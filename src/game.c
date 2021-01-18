@@ -125,7 +125,7 @@ int gamewrite(void)
     fprintf(file_out,"# bindip [0.0.0.0] - What IP should server be bound to (0.0.0.0 means all)\n");
     fprintf(file_out,"bindip=%s\n", game.bindip);
     fprintf(file_out,"\n");
-    fprintf(file_out,"# maxchannels [1] - How many channels should be available on server\n");
+    fprintf(file_out,"# maxchannels [10] - How many channels should be available on server\n");
     fprintf(file_out,"maxchannels=%d\n", game.maxchannels);
     fprintf(file_out,"\n");
     fprintf(file_out,"# timeout_ingame [60] - How many seconds of no activity during a game before timeout occurs\n");
