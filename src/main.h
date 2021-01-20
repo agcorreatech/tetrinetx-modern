@@ -196,6 +196,7 @@ struct game_t {
   int command_msg;		/* Allow msg's? */
   int command_op;		/* Allow command OP */
   int command_winlist;		/* Allow winlist */
+  int command_motd;		/* Allow winlist */
   int command_help;		/* Allow help */
   int command_list;		/* Allow list */
   int command_join;		/* Allow join */
@@ -290,6 +291,8 @@ struct channel_t *chanlist;		/* Channel structure */
 /* And the proto types */
 void net_telnet_init(struct net_t *n, char *buf);
 void net_telnet(struct net_t *n, char *buf);
+void read_motd(struct net_t *n);
+int write_motd();
 void net_query_init(struct net_t *n, char *buf);
 void net_query(struct net_t *n, char *buf);
 void lostnet(struct net_t *n);

@@ -347,11 +347,7 @@ void lprintf(char *format,...)
   time_t cur_time;
   va_start(va,format);
   vsprintf(SBUF2,format,va);
-  if (strlen(SBUF2)>512)
-    {
-      SBUF2[512]=0;   /* truncate string. Of course, by now we have buffer overrun ;) */
-    }
-  
+   
   file_out = fopen(FILE_LOG,"a");
   if (file_out != NULL)
     {
@@ -402,7 +398,7 @@ void init_telnet_port()
     lvprintf(3,"Listening at telnet port %d, on socket %d, bound to %s\n", j,i,game.bindip);
     return;
   }
-  printf("Couldn't find telnet port %d. (TetriNET already running?)\n",j);
+  printf("Couldn't find telnet port %d. (is the server already running?)\n",j);
   lvprintf(0,"Couldn't find telnet port %d.\n", j);
   exit(1);
 }
@@ -443,7 +439,7 @@ void init_query_port()
     lvprintf(3,"Listening at query port %d, on socket %d, bound to %s\n", j,i,game.bindip);
     return;
   }
-  printf("Couldn't find telnet port %d. (TetriNET already running?)\n",j);
+  printf("Couldn't find telnet port %d. (is the server already running?)\n",j);
   lvprintf(0,"Couldn't find telnet port %d.\n", j);
   exit(1);
 }
@@ -990,6 +986,13 @@ void net_connected(struct net_t *n, char *buf)
                       tprintf(n->sock,"pline 0 %cYou do NOT have access to that command!\xff",RED);
                   }
 
+                /* Show MOTD */
+                if ( !strncasecmp(MSG, "/motd", 5) && (game.command_list>0))
+                  {
+                    valid_param=2;
+                    read_motd(n);
+                  }
+
                 /* List Channels */
                 if ( !strncasecmp(MSG, "/list", 5) && (game.command_list>0))
                   {
@@ -1527,7 +1530,7 @@ void net_connected(struct net_t *n, char *buf)
                     else
                       {
                         tprintf(n->sock,"pline 0 Invalid Password! (Attempt logged)\xff");
-                        lvprintf(1,"#%s-%s Failed attempt to gain OP status\n",  n->channel->name, n->nick);
+                        lvprintf(1,"#%s-%s Failed attempt to gain OP status\n", n->channel->name, n->nick);
                       }
                   }
             
@@ -1577,7 +1580,8 @@ void net_connected(struct net_t *n, char *buf)
                     valid_param=2;
                     if (passed_level(n,game.command_help))
                       {
-                        tprintf(n->sock,"pline 0 V%s.%s - Built in server commands %c(*) %crequires 'op', %c(!) %crequires '/op'\xff", TETVERSION, SERVERBUILD, TEAL, BLACK, RED, BLACK);
+                        tprintf(n->sock,"pline 0 HELP - Server Commands - Tetrinet X Modern - v%s.%s\xff", TETVERSION, SERVERBUILD);
+                        tprintf(n->sock,"pline 0 Built-in commands,   %c(*) %crequires 'op',   %c(!) %crequires '/op'\xff", TEAL, BLACK, RED, BLACK);
                         if (game.command_clear>0)
                           {
                             STRG[0]=0;
@@ -1853,6 +1857,27 @@ void net_connected(struct net_t *n, char *buf)
                             tprintf(n->sock,"pline 0   %c/winlist %c[n]\xff", RED, BLUE);
                             tprintf(n->sock,"pline 0       %-4s %cDisplays the top n players\xff",STRG,BLACK);
                           }
+
+                          if (game.command_motd)
+                          {
+                            STRG[0]=0;
+                            switch(game.command_motd)
+                              {
+                                case 2: /* Requires OP */
+                                  {
+                                    sprintf(STRG,"%c(*)", TEAL);
+                                    break;
+                                  }
+                                case 3: /* Requires /OP */
+                                  {
+                                    sprintf(STRG,"%c(!)", RED);
+                                    break;
+                                  }
+                              }
+                            tprintf(n->sock,"pline 0   %c/motd\xff", RED, BLUE);
+                            tprintf(n->sock,"pline 0       %-4s %cDisplays the welcome message\xff",STRG,BLACK);
+                          }
+
                       }
                     else
                       tprintf(n->sock,"pline 0 %cYou do NOT have access to that command!\xff",RED);
@@ -1910,7 +1935,8 @@ void net_connected(struct net_t *n, char *buf)
           {
             valid_param=1;
             strncpy(n->team, MSG, TEAMLEN); n->team[TEAMLEN]=0;
-            lvprintf(5,"#%s-%s changes team to %s\n",n->channel->name,n->nick,n->team);
+
+            lvprintf(5,"#%s-%s is Now on Team %s\n",n->channel->name,n->nick,n->team);
             nsock=n->channel->net;
             while (nsock!=NULL)
               {
@@ -2030,7 +2056,7 @@ void net_connected(struct net_t *n, char *buf)
                 n->status = STAT_LOST;
                 n->timeout = game.timeout_outgame;
                 lvprintf(6,"#%s-%s lost\n",n->channel->name,n->nick);
-                
+                                
                 num2=0;    /* Assume no-one left playing */
                 num3=0;	/* Player who is still in */
                 MSG[0]=0;  /* Store playing team name here */
@@ -2094,11 +2120,11 @@ void net_connected(struct net_t *n, char *buf)
                               {
                                 if ( strlen(ns1->team) > 0)
                                   { /* a team won */
-                                    tprintf(nsock->sock,"pline 0 ---- Team %s%c WON ----\xff", ns1->team, BLACK);
+                                    tprintf(nsock->sock,"pline 0 %c-=== Team %s%c WON ===-\xff", BOLD, ns1->team, BLACK);
                                   }
                                 else
                                   { /* a player won */
-                                    tprintf(nsock->sock,"pline 0 ---- Player %s%c WON ----\xff", ns1->nick, BLACK);
+                                    tprintf(nsock->sock,"pline 0 %c-=== Player %s%c WON ===-\xff", BOLD, ns1->nick, BLACK);
                                   }
                               }
                           }
@@ -2282,7 +2308,6 @@ void net_connected(struct net_t *n, char *buf)
 /* The player has sent their inital team name, well they should have anyway */
 void net_waitingforteam(struct net_t *n, char *buf)
   {
-    FILE *file_in;
     char strg[1024];
     char *P;
     struct net_t *nsock;
@@ -2294,7 +2319,7 @@ void net_waitingforteam(struct net_t *n, char *buf)
         killsock(n->sock); lostnet(n);
         return;
       }
-    
+
     P=buf+strlen(strg);
     n->type=NET_CONNECTED;
     n->status=STAT_NOTPLAYING;
@@ -2304,7 +2329,8 @@ void net_waitingforteam(struct net_t *n, char *buf)
     while (nsock!=NULL)
       {
         if ( (nsock != n) && (nsock->type==NET_CONNECTED))
-          { 
+          {
+
             /* Send each other player and their team to this player */
             tprintf(n->sock, "playerjoin %d %s\xffteam %d %s\xff", nsock->gameslot, nsock->nick, nsock->gameslot, nsock->team);
           
@@ -2313,22 +2339,7 @@ void net_waitingforteam(struct net_t *n, char *buf)
           }
         nsock=nsock->next;
       }
-    
-    /* Now for the game.motd if it exists. */
-    file_in = fopen(FILE_MOTD,"r");
-    if (file_in != NULL)
-      {/* Exists, so send it to the player */
-        while (!feof(file_in))
-          {
-            if(fscanf(file_in,"%1023[^\n]\n", strg) != 1)
-            {
-              printf("Error: Failed to read MOTD file: %s.\n",FILE_MOTD);
-            }
-            tprintf(n->sock,"pline 0 %s\xff", strg);
-          }
-        fclose(file_in);
-      }
-      
+  
     /* If game is in progress, send all other players fields */
     /* Tell each other player that we are lost... no really :P */
     if( (n->channel->status == STATE_INGAME) || (n->channel->status == STATE_PAUSED) )
@@ -2365,6 +2376,72 @@ void net_waitingforteam(struct net_t *n, char *buf)
     
     lvprintf(2,"#%s-%s New connection\n", n->channel->name,n->nick);
   }
+
+/* Read the MOTD file */
+void read_motd(struct net_t *n)
+{
+  FILE *file_in;
+  char motd[1024];
+
+  file_in = fopen(FILE_MOTD,"r");
+ 
+  /* File exists, so read it */
+  if (file_in != NULL)
+  {
+    while (!feof(file_in))
+    {
+      
+      if(fscanf(file_in,"%1023[^\n]\n", motd) != 1)
+      {
+        lvprintf(4,"ERROR: Failed to read MOTD file. Check folder permissions or remove the file.\n");
+        fatal("Failed to read MOTD file. Check folder permissions or remove the file.",0);
+      }
+      else {
+        tprintf(n->sock,"pline 0 %c%c%s\xff", BOLD, BLUE, motd);
+      }
+    }
+  
+    lvprintf(4,"File game.motd read successfully.\n");
+  }
+  else
+  {
+    lvprintf(4,"ERROR: Failed to read MOTD file. Check folder permissions or remove the file.\n");
+    fatal("Failed to read MOTD file. Check folder permissions or remove the file.",0);
+  }
+
+  fclose(file_in);
+}
+
+/* Write a new the MOTD file with defaults */
+int write_motd()
+{
+
+  FILE *file_in;
+  FILE *file_out;
+
+  file_in = fopen(FILE_MOTD,"r");
+ /* File don't exists */
+  if (file_in != NULL)
+  {
+    fclose(file_in);
+    lvprintf(4,"File %s read successfully\n", FILE_MOTD);
+    return(-1);
+  }
+
+  lvprintf(4,"Creating a new %s file with defaults\n", FILE_MOTD);
+    
+  file_out = fopen(FILE_MOTD, "w");
+  if (file_out == NULL)
+    return(-1);
+
+  fprintf(file_out,"Welcome! TetriNET is still alive! :)\n");
+  fprintf(file_out,"This server is running Tetrinet X Modern\n");
+  fprintf(file_out,"More info: http://bit.do/tetrinetx\n");
+  
+  fclose(file_out);
+
+  return(1);
+}
 
 /* Recieving Query commands */
 void net_query_init(struct net_t *n, char *buf)
@@ -2547,6 +2624,9 @@ void net_telnet_init(struct net_t *n, char *buf)
 
     n->team[0] = 0; /* Clear Team */
     
+    // Send motd to the player
+    read_motd(n);
+
     /* Now waiting for team */
     n->type = NET_WAITINGFORTEAM;
     
@@ -2898,7 +2978,7 @@ void init_main(void)
   {
     struct sigaction sv;
     
-    lvprintf(0,"\nTetriNET for Linux V%s.%s\n---------------------------------\n", TETVERSION, SERVERBUILD);
+    lvprintf(0,"\n\n------------------------------------\nTetrinet X Modern for Linux v%s.%s\n------------------------------------\n", TETVERSION, SERVERBUILD);
     
 
     gnet=NULL;
@@ -3003,7 +3083,9 @@ int main(int argc, char *argv[])
     int forknum;
     long int timeticks, otimeticks;
     
- 
+    printf("\nTetrinet X Modern - New GNU TetriNET Server\n");
+    printf("More info: http://bit.do/tetrinetx\n\n");
+        
     /* Initialise */
     init_main();
     init_game();
@@ -3012,8 +3094,9 @@ int main(int argc, char *argv[])
     /*init_query_port();*/
     init_winlist();
     init_security();
-    readwinlist(); 
-    
+    readwinlist();
+    write_motd();
+
     if (securityread() < 0)
       securitywrite();
     
@@ -3036,7 +3119,7 @@ int main(int argc, char *argv[])
     close(2);
     
     /* Write out PID */
-    writepid();                                      
+    writepid();
     
     /* Reset time */
     timeticks = time(NULL);

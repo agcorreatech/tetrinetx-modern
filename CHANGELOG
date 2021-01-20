@@ -1,4 +1,26 @@
-Release 01 - 18/Jan/2020
+Release 02 - (not launched yet)
+
+- Fixed a bug that crashes the server while reading the motd file, that was
+optional. It has been created two new functions in "main.c" file to handle it:
+read_motd() and write_motd(). Now there is always a "message of the day" file.
+When you use the command "/motd", this info is shown again. Also added this to
+/help command.
+
+- Fixed a bug in the function lprintf(), that was preventing some info to be
+wrote correctly to the LOG file.
+
+- Added a message to linux terminal when you run the server:
+Tetrinet X Modern - New GNU TetriNET Server
+More info: http://bit.do/tetrinetx
+
+- Changed the header message of the log file when you start the server.
+
+- Changed the option "game.maxchannels" to "10" in "game.conf". The old parameter
+was "1", that did not allow to create more game channels by default.
+
+_________________________________________________________________________________
+
+RELEASE 01 - 18/Jan/2020
 
 - Finished the review of the code and replaced the old library varargs.h
 by stdarg.h. The functions lvprintf(), tprintf() and lprintf() was rewritten.
@@ -12,3 +34,5 @@ was giving warnings in the compilation. Now it's compiling like a charm!
 
 - The code is now full functional and can be used! It is the original version
 of the tetrinetx, but working in 2020!
+
+_________________________________________________________________________________

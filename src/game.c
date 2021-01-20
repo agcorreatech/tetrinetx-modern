@@ -209,6 +209,7 @@ int gamewrite(void)
     fprintf(file_out,"command_priority=%d\n", game.command_priority);
     fprintf(file_out,"command_move=%d\n", game.command_move);
     fprintf(file_out,"command_winlist=%d\n", game.command_winlist);
+    fprintf(file_out,"command_motd=%d\n", game.command_motd);
     fprintf(file_out,"command_set=%d\n", game.command_set);
     fprintf(file_out,"command_persistant=%d\n", game.command_persistant);
     fprintf(file_out,"command_save=%d\n", game.command_save);
@@ -612,6 +613,11 @@ int gameread(void)
                 game.command_winlist=atoi(id_value);
                 error=0;
               }
+            if (!strcasecmp(id_tag,"command_motd"))
+              {
+                game.command_motd=atoi(id_value);
+                error=0;
+              }
             if (!strcasecmp(id_tag,"command_set"))
               {
                 game.command_set=atoi(id_value);
@@ -814,7 +820,7 @@ void init_game(void)
   
     strncpy(game.pidfile, FILE_PID, PIDFILELEN-1); game.pidfile[PIDFILELEN-1]=0;
     strncpy(game.bindip, "0.0.0.0", IPLEN-1); game.bindip[IPLEN-1]=0;
-    game.maxchannels=1;
+    game.maxchannels=10;
     game.starting_level = 1;
     game.lines_per_level = 2;
     game.level_increase = 1;
@@ -838,6 +844,7 @@ void init_game(void)
     game.command_priority=2;
     game.command_move=2;
     game.command_winlist=1;
+    game.command_motd=1;
     game.command_help=1;
     game.command_set=4;
     game.command_persistant=3;
@@ -1052,9 +1059,7 @@ void sendwinlist(struct channel_t *chan,struct net_t *n)
       nsock=chan->net;
     else
       nsock=n;
-    
-    
-    
+       
     do
       {
         if ( ( (nsock->type == NET_CONNECTED)|| (nsock->type == NET_WAITINGFORTEAM)) )
