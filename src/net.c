@@ -250,7 +250,7 @@ char *hostnamefromip(ip)
 unsigned long ip;
 {
   struct hostent *hp; unsigned long addr=ip;
-  unsigned char *p; static char s[121];
+  unsigned char *p; static char s[UHOSTLEN];
 /*  alarm(10);*/
   hp=gethostbyaddr((char *)&addr,sizeof(addr),AF_INET); /*alarm(0);*/
   if (hp==NULL) {
@@ -258,7 +258,9 @@ unsigned long ip;
     sprintf(s,"%u.%u.%u.%u",p[0],p[1],p[2],p[3]);
     return s;
   }
-  strcpy(s,hp->h_name); return s;
+  strncpy(s,hp->h_name,(UHOSTLEN-1));
+  s[UHOSTLEN-1]='\0';
+  return s;
 }
 
 /* short routine to answer a connect received on a socket made previously

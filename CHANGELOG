@@ -1,23 +1,27 @@
-Release 02 - (not launched yet)
+Release 03 - 24/Jun/2023
+
+- Added a message to linux terminal when you run the server.
+- Changed compile shell script to use bash instead of sh.
+- Fixed issue CVE-1999-1060 Buffer overflow in Tetrix TetriNet daemon 1.13.16
+allows remote attackers to cause a denial of service
+- Added information to README how to compile the server using Visual Studio Code
+and WSL (linux) for Windows.
+- Added Tetrinet 1.13 for Windows (game client) original from St0rmCat.
+- Added .gitignore file to skip some files
+_________________________________________________________________________________
+
+Release 02 - 20/Jan/2021
 
 - Fixed a bug that crashes the server while reading the motd file, that was
 optional. It has been created two new functions in "main.c" file to handle it:
 read_motd() and write_motd(). Now there is always a "message of the day" file.
 When you use the command "/motd", this info is shown again. Also added this to
 /help command.
-
 - Fixed a bug in the function lprintf(), that was preventing some info to be
 wrote correctly to the LOG file.
-
-- Added a message to linux terminal when you run the server:
-Tetrinet X Modern - New GNU TetriNET Server
-More info: http://bit.do/tetrinetx
-
 - Changed the header message of the log file when you start the server.
-
 - Changed the option "game.maxchannels" to "10" in "game.conf". The old parameter
 was "1", that did not allow to create more game channels by default.
-
 _________________________________________________________________________________
 
 RELEASE 01 - 18/Jan/2020
@@ -25,14 +29,10 @@ RELEASE 01 - 18/Jan/2020
 - Finished the review of the code and replaced the old library varargs.h
 by stdarg.h. The functions lvprintf(), tprintf() and lprintf() was rewritten.
 No more errors, now the code can be compilled with modern GCC versions.
-
 - All returns of the functions fscanf() has been treated as it should be, and
 there is no more warnings about it in the compilation.
-
 - Fixed some bugs with variable formats and type conversions everywhere, that
 was giving warnings in the compilation. Now it's compiling like a charm!
-
 - The code is now full functional and can be used! It is the original version
 of the tetrinetx, but working in 2020!
-
 _________________________________________________________________________________
