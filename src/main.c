@@ -2436,7 +2436,7 @@ int write_motd()
 
   fprintf(file_out,"Welcome! TetriNET is still alive! :)\n");
   fprintf(file_out,"This server is running Tetrinet X Modern\n");
-  fprintf(file_out,"More info: http://bit.do/tetrinetx\n");
+  fprintf(file_out,"More info: https://github.com/agcorreatech/tetrinetx-modern\n");
   
   fclose(file_out);
 
@@ -2642,7 +2642,7 @@ void net_telnet_init(struct net_t *n, char *buf)
 /* Someone has just connected. So lets answer them */
 void net_telnet(struct net_t *n, char *buf)
   {
-    unsigned long ip; int k,l; char s[121]; char strg[121];
+    unsigned long ip; int k,l; char s[UHOSTLEN]; char strg[121];
     char n1[4], n2[4], n3[4], n4[4];
     struct channel_t *chan, *ochan;
     struct net_t *net;
@@ -3084,7 +3084,7 @@ int main(int argc, char *argv[])
     long int timeticks, otimeticks;
     
     printf("\nTetrinet X Modern - New GNU TetriNET Server\n");
-    printf("More info: http://bit.do/tetrinetx\n\n");
+    printf("More info: https://github.com/agcorreatech/tetrinetx-modern\n\n");
         
     /* Initialise */
     init_main();

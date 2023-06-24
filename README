@@ -9,12 +9,44 @@ without interest in IRC Server or spectator features.
 
 View the CHANGELOG file to follow what was done.
 
-This code was built using Ubuntu 20.04.1 LTS and it was developed
-using Visual Studio Code running in Windows 10, integrated with
-WSL (Windows Subsystem for Linux) to compile and run the code
-in the native environment.
+This code was built using Ubuntu and it was developed using Visual Studio
+Code running in Windows 10, integrated with WSL (Windows Subsystem for
+Linux) to compile and run the code in the native environment.
 
-I appreciate your suggestions... send me an email.
+Problems or suggestions about this project?
+Open a New Issue in Github:
+https://github.com/agcorreatech/tetrinetx-modern/issues
 
 This job is in progress and it is beign done by
 Alexandro Corrêa <alex.linux@gmail.com> from Brazil.
+
+___________________________________________________________________________
+
+How to compile the project
+
+If you want to run the Tetrinet Server, you don't need to compile the code,
+just use the binary file located in "bin" folder.
+
+But if you want to compile your own code or make your own changes, follow
+the steps described above to setup the environment to compile:
+
+1. Install Microsoft Visual Studio Code and clone the project (git clone)
+2. Open Power Shell and execute: wsl --install -d ubuntu
+3. Install Visual Studio Code Remote Development Extension Pack:
+https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.vscode-remote-extensionpack
+4. Open a Terminal in Vscode or a Windows Command Pronpt and execute:
+4.1 wls
+4.2 sudo apt-get update
+4.3 sudo apt-get upgrade
+4.4 sudo apt-get install bash
+4.5 sudo apt-get install gcc
+
+Now the environment is prepared to compile the project. Execute the commands:
+
+1. cd src
+2. sed -i -e 's/\r$//' compile.linux
+3. ./compile.linux
+
+[Linux] Compiling TetriNET X Modern Server [../bin/tetrix-modern.linux]
+
+Well Done!
