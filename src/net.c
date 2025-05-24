@@ -49,39 +49,79 @@ int expmem_net()
 }
 
 /* puts full hostname in s */
-void getmyhostname(s)
-char *s;
-{
-  struct hostent *hp; char *p;
- 
-  p=getenv("HOSTNAME"); if (p!=NULL) {
-    strcpy(s,p); if (strchr(s,'.')!=NULL) return;
+void getmyhostname(char *s) {
+  char *env = getenv("HOSTNAME");
+  if (env != NULL) {
+    strcpy(s, env);
+    if (strchr(s, '.') != NULL) return;
   }
-  gethostname(s,80);
-  if (strchr(s,'.')!=NULL) return;
-  hp=gethostbyname(s);
-  if (hp==NULL)
-    fatal("Hostname self-lookup failed.",0);
-  strcpy(s,hp->h_name);
-  if (strchr(s,'.')!=NULL) return;
-  if (hp->h_aliases[0] == NULL)
-    fatal("Can't determine your hostname!",0);
-  strcpy(s,hp->h_aliases[0]);
-  if (strchr(s,'.')==NULL)
-    fatal("Can't determine your hostname!",0);   
+
+  if (gethostname(s, 80) != 0) {
+    perror("gethostname failed");
+    exit(1);
+  }
+
+  if (strchr(s, '.') != NULL) return;
+
+  struct addrinfo hints, *res;
+  char fqdn[NI_MAXHOST];
+
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_family = AF_UNSPEC; // Allow IPv4 or IPv6
+  hints.ai_socktype = SOCK_STREAM;
+
+  int r = getaddrinfo(s, NULL, &hints, &res);
+  if (r != 0 || res == NULL) {
+    fprintf(stderr, "Hostname self-lookup failed: %s\n", gai_strerror(r));
+  }
+
+  if (getnameinfo(res->ai_addr, res->ai_addrlen, fqdn, sizeof(fqdn), NULL, 0, NI_NAMEREQD) != 0) {
+    freeaddrinfo(res);
+    fatal("Can't determine your hostname!", 0);
+  }
+
+  freeaddrinfo(res);
+    strcpy(s, fqdn);
+
+  if (strchr(s, '.') == NULL) {
+    fatal("Can't determine your hostname!", 0);
+  }
 }
 
 /* get my ip number */
-IP getmyip()
-{
-  struct hostent *hp; char s[121]; IP ip; struct in_addr *in;
+IP getmyip() {
+  char hostname[121];
+  struct addrinfo hints, *res, *p;
+  IP ip = 0;
 
-  gethostname(s,120);
-  hp=gethostbyname(s);
+  if (gethostname(hostname, sizeof(hostname)) != 0) {
+    perror("gethostname failed");
+    exit(1);
+  }
 
-  if (hp==NULL) fatal("Hostname self-lookup failed.",0);
-  in=(struct in_addr *)(hp->h_addr_list[0]);
-  ip=(IP)(in->s_addr);
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_family = AF_INET;      // IPv4 only
+  hints.ai_socktype = SOCK_STREAM;
+
+  int r = getaddrinfo(hostname, NULL, &hints, &res);
+  if (r != 0) {
+    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(r));
+    exit(1);
+  }
+
+  for (p = res; p != NULL; p = p->ai_next) {
+    struct sockaddr_in *addr = (struct sockaddr_in *)p->ai_addr;
+    ip = addr->sin_addr.s_addr;
+    break; // Use the first result
+  }
+
+  freeaddrinfo(res);
+
+  if (ip == 0) {
+    fprintf(stderr, "Failed to find IPv4 address\n");
+    exit(1);
+  }
+
   return ip;
 }
 
