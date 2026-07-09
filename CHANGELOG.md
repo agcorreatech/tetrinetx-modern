@@ -40,6 +40,14 @@
   do CVE-1999-1060, é a mesma classe de bug escrevendo no mesmo campo
   `n->host`; a função agora recebe o tamanho do buffer e usa
   `strncpy`/terminação nula em todas as cópias.
+- **Fix:** consequência do ponto acima — a mesma função também
+  recusava iniciar o servidor (`fatal()` → `exit(1)`) sempre que não
+  conseguia determinar um hostname totalmente qualificado (FQDN) da
+  própria máquina, mostrando `"Can't determine your hostname!"` e
+  encerrando. Isso é comum em containers, sandboxes e setups mínimos
+  sem DNS/domínio configurado. Agora ela usa o melhor hostname que
+  conseguiu resolver (ou `"localhost"` como último recurso), registra
+  um aviso (stdout + log) e o servidor continua subindo normalmente.
 
 - **Removed:** `TODO` / `TODO.md` — todos os itens que estavam listados
   (bug do fim de jogo com 1 jogador, bug da winlist e o suporte a

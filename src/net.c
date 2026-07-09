@@ -68,15 +68,30 @@ char *s; int len;
   s[len-1]='\0';
   if (strchr(s,'.')!=NULL) return;
   hp=gethostbyname(s);
-  if (hp==NULL)
-    fatal("Hostname self-lookup failed.",0);
-  strncpy(s,hp->h_name,len-1); s[len-1]='\0';
-  if (strchr(s,'.')!=NULL) return;
-  if (hp->h_aliases[0] == NULL)
-    fatal("Can't determine your hostname!",0);
-  strncpy(s,hp->h_aliases[0],len-1); s[len-1]='\0';
-  if (strchr(s,'.')==NULL)
-    fatal("Can't determine your hostname!",0);   
+  if (hp!=NULL)
+    {
+      strncpy(s,hp->h_name,len-1); s[len-1]='\0';
+      if (strchr(s,'.')!=NULL) return;
+      if (hp->h_aliases[0] != NULL)
+        {
+          strncpy(s,hp->h_aliases[0],len-1); s[len-1]='\0';
+          if (strchr(s,'.')!=NULL) return;
+        }
+    }
+  /* BUGFIX: this used to call fatal() and kill the whole server just
+     because the machine has no FQDN configured (no domain in
+     /etc/hosts, no reverse DNS, etc) -- very common on containers,
+     sandboxes, and minimal setups. That's a startup message/log
+     detail, not something worth refusing to run over. Fall back to
+     whatever plain hostname we already have (from the env var or
+     gethostname() above), or "localhost" if even that came back
+     empty, and keep going. */
+  if (s[0]=='\0')
+    {
+      strncpy(s,"localhost",len-1); s[len-1]='\0';
+    }
+  printf("Warning: could not determine a fully qualified hostname (no FQDN/DNS configured for this machine); using '%s' instead.\n", s);
+  lvprintf(2,"Warning: could not determine a fully qualified hostname; using '%s' instead.\n", s);
 }
 
 /* get my ip number */
