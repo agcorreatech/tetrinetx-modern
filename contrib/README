@@ -23,3 +23,9 @@ Programs
 	kick any of those people off.
 
 
+* contrib/systemd 	(agcorreatech - 2026)
+	systemd unit file and install script to run tetrinetx as a Linux
+	service (systemctl start/stop/restart/status tetrinetx). See
+	contrib/systemd/README.md for details.
+
+

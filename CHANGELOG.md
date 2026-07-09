@@ -26,8 +26,15 @@
     arquivos em `/opt/tetrinetx` e registra o serviço.
   - `README.md`: instruções de uso (`systemctl start|stop|restart|status
     tetrinetx`).
-- **Changed:** `CHANGELOG` e `TODO` convertidos para Markdown
-  (`CHANGELOG.md` / `TODO.md`).
+- **Changed:** `CHANGELOG` convertido para Markdown (`CHANGELOG.md`).
+- **Removed:** `TODO` / `TODO.md` — todos os itens que estavam listados
+  (bug do fim de jogo com 1 jogador, bug da winlist e o suporte a
+  systemd) já foram implementados; o histórico do Git preserva o
+  conteúdo antigo, caso seja necessário consultar.
+- **Fixed (docs):** `README` apontava para um arquivo `CHANGELOG` que
+  não existe mais (agora é `CHANGELOG.md`); corrigidos também pequenos
+  erros de digitação ("implementetion", "beign", "Pronpt", "wls") e
+  adicionada uma seção apontando para `contrib/systemd/README.md`.
 
 _________________________________________________________________________________
 
