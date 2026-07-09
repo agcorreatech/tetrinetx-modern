@@ -1,0 +1,20 @@
+.git
+.gitignore
+*.md
+CHANGELOG.md
+TODO.md
+README
+
+# Não precisamos do binário pré-compilado nem dos arquivos de dados runtime
+# dentro do contexto de build -- o Dockerfile compila o binário do zero e
+# só copia game.conf/game.motd de bin/ como defaults.
+bin/tetrix-modern.linux
+bin/game.log
+bin/game.pid
+bin/game.winlist
+bin/game.secure
+
+# Cliente Windows não é usado pela imagem do servidor
+tetrinet_windows_client_v1.13/
+
+contrib/

@@ -57,3 +57,11 @@ Running as a systemd service (Linux)
 
 To manage the server with systemctl (start/stop/restart/status) instead of
 running it manually, see contrib/systemd/README.md.
+
+
+___________________________________________________________________________
+
+Running with Docker / Docker Desktop
+
+To build and run the server in a container instead of compiling it
+locally, see docker/README.md.

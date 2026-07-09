@@ -17,6 +17,26 @@
   lista interna recebesse a winlist atualizada. Corrigido para
   `n == NULL`, permitindo que o laço percorra toda a lista de jogadores
   quando o destino é "todos".
+- **Added:** suporte para compilar e rodar o servidor com **Docker /
+  Docker Desktop** (`docker/`), incluindo:
+  - `Dockerfile`: build multi-stage (compila com `gcc` em uma etapa,
+    imagem final enxuta rodando com usuário sem privilégios).
+  - `entrypoint.sh`: lida com o fato de o binário fazer seu próprio
+    "double-fork" ao daemonizar (incompatível com o modelo padrão de
+    container), mantendo o container em primeiro plano enquanto o
+    processo real do servidor estiver vivo, e repassando
+    `SIGTERM`/`SIGINT` corretamente.
+  - `docker-compose.yml`: forma recomendada de uso no Docker Desktop,
+    já com portas, volume persistente (`/data`) e `init: true`
+    configurados.
+  - `README.md`: instruções de uso completas, incluindo a explicação
+    do porquê de precisar de `--init`/`init: true` (evitar zumbis
+    gerados pelo double-fork do binário em containers sem um init de
+    verdade como PID 1).
+  - `.dockerignore` (raiz do repo): contexto de build enxuto, sem
+    `.git`, binário pré-compilado, cliente Windows, etc.
+- **Changed:** `README` principal agora também aponta para
+  `docker/README.md`.
 - **Added:** suporte a gerenciar o servidor como serviço `systemd` no
   Linux (`contrib/systemd/`), incluindo:
   - `tetrinetx.service`: unit file (`Type=forking`, já que o binário faz
