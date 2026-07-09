@@ -382,7 +382,7 @@ void init_telnet_port()
     n->addr=getmyip();
     n->type=NET_TELNET;
     strcpy(n->nick,"(telnet)");
-    getmyhostname(n->host);
+    getmyhostname(n->host,sizeof(n->host));
   }
   else {
     /* already an entry */
@@ -423,7 +423,7 @@ void init_query_port()
     n->addr=getmyip();
     n->type=NET_QUERY;
     strcpy(n->nick,"(telnet)");
-    getmyhostname(n->host);
+    getmyhostname(n->host,sizeof(n->host));
   }
   else {
     /* already an entry */

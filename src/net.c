@@ -48,25 +48,33 @@ int expmem_net()
   return tot;
 }
 
-/* puts full hostname in s */
-void getmyhostname(s)
-char *s;
+/* puts full hostname in s (buffer of size len). BUGFIX (hardening,
+   related to CVE-1999-1060): all copies here used to be unbounded
+   strcpy() calls. This is not the remotely-triggerable CVE-1999-1060
+   path (that one is hostnamefromip(), already bounded), but it is the
+   same class of bug applied to the server's own hostname resolution,
+   so it is bounded here too for consistency/defense-in-depth. */
+void getmyhostname(s,len)
+char *s; int len;
 {
   struct hostent *hp; char *p;
  
+  if (len<1) return;
   p=getenv("HOSTNAME"); if (p!=NULL) {
-    strcpy(s,p); if (strchr(s,'.')!=NULL) return;
+    strncpy(s,p,len-1); s[len-1]='\0';
+    if (strchr(s,'.')!=NULL) return;
   }
-  gethostname(s,80);
+  gethostname(s,(len<80?len:80));
+  s[len-1]='\0';
   if (strchr(s,'.')!=NULL) return;
   hp=gethostbyname(s);
   if (hp==NULL)
     fatal("Hostname self-lookup failed.",0);
-  strcpy(s,hp->h_name);
+  strncpy(s,hp->h_name,len-1); s[len-1]='\0';
   if (strchr(s,'.')!=NULL) return;
   if (hp->h_aliases[0] == NULL)
     fatal("Can't determine your hostname!",0);
-  strcpy(s,hp->h_aliases[0]);
+  strncpy(s,hp->h_aliases[0],len-1); s[len-1]='\0';
   if (strchr(s,'.')==NULL)
     fatal("Can't determine your hostname!",0);   
 }

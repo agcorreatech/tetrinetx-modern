@@ -26,7 +26,21 @@
     arquivos em `/opt/tetrinetx` e registra o serviço.
   - `README.md`: instruções de uso (`systemctl start|stop|restart|status
     tetrinetx`).
-- **Changed:** `CHANGELOG` convertido para Markdown (`CHANGELOG.md`).
+- **Security (reviewed):** CVE-1999-1060 (buffer overflow via long DNS
+  hostname on connect, port 31457) revisada linha a linha. O vetor
+  remoto real (`hostnamefromip()` em `src/net.c`, que resolve o
+  hostname de quem conecta via `gethostbyaddr()`) já estava corrigido
+  desde a Release 03, com `strncpy`/terminação nula corretas — não foi
+  necessária nenhuma mudança de código para o CVE em si.
+- **Hardening (relacionado, não é o CVE):** `getmyhostname()`
+  (`src/net.c`), usada apenas para resolver o hostname do **próprio
+  servidor** na inicialização (não é acionável remotamente por um
+  jogador), ainda fazia `strcpy()` sem limite a partir da variável de
+  ambiente `HOSTNAME` e do self-lookup de DNS. Mesmo não sendo o vetor
+  do CVE-1999-1060, é a mesma classe de bug escrevendo no mesmo campo
+  `n->host`; a função agora recebe o tamanho do buffer e usa
+  `strncpy`/terminação nula em todas as cópias.
+
 - **Removed:** `TODO` / `TODO.md` — todos os itens que estavam listados
   (bug do fim de jogo com 1 jogador, bug da winlist e o suporte a
   systemd) já foram implementados; o histórico do Git preserva o
