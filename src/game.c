@@ -1109,7 +1109,10 @@ void sendwinlist(struct channel_t *chan,struct net_t *n)
             tprintf(nsock->sock,"\xff");
           }
         nsock=nsock->next;
-      } while ( (n!=NULL) && (nsock!=NULL) );
+      } while ( (n==NULL) && (nsock!=NULL) );
+      /* BUGFIX: condition was (n!=NULL), which made the "send to all" case
+         (n==NULL) stop after a single iteration, so only the first player
+         in the channel linked list ever received the updated winlist. */
   }
   
   

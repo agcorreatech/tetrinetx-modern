@@ -382,7 +382,7 @@ void init_telnet_port()
     n->addr=getmyip();
     n->type=NET_TELNET;
     strcpy(n->nick,"(telnet)");
-    getmyhostname(n->host);
+    getmyhostname(n->host,sizeof(n->host));
   }
   else {
     /* already an entry */
@@ -423,7 +423,7 @@ void init_query_port()
     n->addr=getmyip();
     n->type=NET_QUERY;
     strcpy(n->nick,"(telnet)");
-    getmyhostname(n->host);
+    getmyhostname(n->host,sizeof(n->host));
   }
   else {
     /* already an entry */
@@ -2082,53 +2082,69 @@ void net_connected(struct net_t *n, char *buf)
                       }
                     nsock=nsock->next;
                   }
-                if ( (num2 <= 1) && (ns1!=NULL) )
+                if (num2 <= 1)
                   { /* 1 or less different teams playing. Stop the game, and take score */
-                    if (ns1->type == NET_CONNECTED)
-                      {
-                        if (strlen(ns1->team) > 0)
-                          { /* Team won, so add score to team */
-                            updatewinlist(ns1->team,'t',3);
+                    if (ns1!=NULL)
+                      { /* BUGFIX: there was another player/team left -> declare a winner as before */
+                        if (ns1->type == NET_CONNECTED)
+                          {
+                            if (strlen(ns1->team) > 0)
+                              { /* Team won, so add score to team */
+                                updatewinlist(ns1->team,'t',3);
+                              }
+                            else
+                              { /* Player won, so add score to player name */
+                                updatewinlist(ns1->nick,'p',3);
+                              }
                           }
-                        else
-                          { /* Player won, so add score to player name */
-                            updatewinlist(ns1->nick,'p',3);
+                        n->channel->status=STATE_ONLINE;
+                        nsock=n->channel->net;
+                        while (nsock!=NULL)
+                          {
+                            if ( (nsock->type == NET_CONNECTED))
+                              {
+                                tprintf(nsock->sock,"endgame\xff");
+                                tprintf(nsock->sock,"playerwon %d\xff", ns1->gameslot);
+                                nsock->status=STAT_NOTPLAYING;
+                                nsock->timeout=game.timeout_outgame;
+                                /* Send every playing field */
+                                
+                                ns2=n->channel->net;
+                                while (ns2!=NULL)
+                                  {
+                                    if ( (ns2!=nsock) && (ns2->type == NET_CONNECTED))
+                                      sendfield(nsock,ns2);
+                                    ns2=ns2->next;
+                                  }
+                            
+                                /*!!! ADD-IN: Server anounces winner */
+                                if ( (ns1->type == NET_CONNECTED) && n->channel->serverannounce)
+                                  {
+                                    if ( strlen(ns1->team) > 0)
+                                      { /* a team won */
+                                        tprintf(nsock->sock,"pline 0 %c-=== Team %s%c WON ===-\xff", BOLD, ns1->team, BLACK);
+                                      }
+                                    else
+                                      { /* a player won */
+                                        tprintf(nsock->sock,"pline 0 %c-=== Player %s%c WON ===-\xff", BOLD, ns1->nick, BLACK);
+                                      }
+                                  }
+                              }
+                            nsock=nsock->next;
                           }
                       }
-                    n->channel->status=STATE_ONLINE;
-                    nsock=n->channel->net;
-                    while (nsock!=NULL)
-                      {
-                        if ( (nsock->type == NET_CONNECTED))
+                    else
+                      { /* BUGFIX: lone player game (no opponent left connected/playing).
+                           Previously the endgame block was skipped entirely because ns1
+                           stayed NULL, leaving the channel stuck in STATE_INGAME forever. */
+                        n->channel->status=STATE_ONLINE;
+                        n->status=STAT_NOTPLAYING;
+                        n->timeout=game.timeout_outgame;
+                        tprintf(n->sock,"endgame\xff");
+                        if (n->channel->serverannounce)
                           {
-                            tprintf(nsock->sock,"endgame\xff");
-                            tprintf(nsock->sock,"playerwon %d\xff", ns1->gameslot);
-                            nsock->status=STAT_NOTPLAYING;
-                            nsock->timeout=game.timeout_outgame;
-                            /* Send every playing field */
-                            
-                            ns2=n->channel->net;
-                            while (ns2!=NULL)
-                              {
-                                if ( (ns2!=nsock) && (ns2->type == NET_CONNECTED))
-                                  sendfield(nsock,ns2);
-                                ns2=ns2->next;
-                              }
-                        
-                            /*!!! ADD-IN: Server anounces winner */
-                            if ( (ns1->type == NET_CONNECTED) && n->channel->serverannounce)
-                              {
-                                if ( strlen(ns1->team) > 0)
-                                  { /* a team won */
-                                    tprintf(nsock->sock,"pline 0 %c-=== Team %s%c WON ===-\xff", BOLD, ns1->team, BLACK);
-                                  }
-                                else
-                                  { /* a player won */
-                                    tprintf(nsock->sock,"pline 0 %c-=== Player %s%c WON ===-\xff", BOLD, ns1->nick, BLACK);
-                                  }
-                              }
+                            tprintf(n->sock,"pline 0 %c-=== Game Over - no winner ===-%c\xff", BOLD, BLACK);
                           }
-                        nsock=nsock->next;
                       }
                     writewinlist();
                     sendwinlist(n->channel,NULL);	/* Send to all */

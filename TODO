@@ -1,9 +1,0 @@
------------
-TO DO LIST:
------------
-
-20/jan/2021 - Create commands to start / stop / restart the tetrinet service in linux
-
-Bugs:
-20/jan/2021 - Jogo não finaliza quando tem só 1 jogador e este perde
-20/jan/2021 - Atualizar winlist a cada fim de jogo para todos os jogadores

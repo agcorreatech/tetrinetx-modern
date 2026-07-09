@@ -4,10 +4,10 @@ This project is an update of the classic tetrinetx - GNU TetriNET Server -
 to be supported by new linux distributions and C compiler versions.
 
 This project started with the tetrinetx version 1.13.16 without qirc,
-because the objective is to advance with the tetrinet server implementetion,
+because the objective is to advance with the tetrinet server implementation,
 without interest in IRC Server or spectator features.
 
-View the CHANGELOG file to follow what was done.
+View the CHANGELOG.md file to follow what was done.
 
 This code was built using Ubuntu and it was developed using Visual Studio
 Code running in Windows 10, integrated with WSL (Windows Subsystem for
@@ -17,7 +17,7 @@ Problems or suggestions about this project?
 Open a New Issue in Github:
 https://github.com/agcorreatech/tetrinetx-modern/issues
 
-This job is in progress and it is beign done by
+This job is in progress and it is being done by
 Alexandro Corrêa <alex.linux@gmail.com> from Brazil.
 
 ___________________________________________________________________________
@@ -34,8 +34,8 @@ the steps described above to setup the environment to compile:
 2. Open Power Shell and execute: wsl --install -d ubuntu
 3. Install Visual Studio Code Remote Development Extension Pack:
 https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.vscode-remote-extensionpack
-4. Open a Terminal in Vscode or a Windows Command Pronpt and execute:
-4.1 wls
+4. Open a Terminal in Vscode or a Windows Command Prompt and execute:
+4.1 wsl
 4.2 sudo apt-get update
 4.3 sudo apt-get upgrade
 4.4 sudo apt-get install bash
@@ -50,3 +50,10 @@ Now the environment is prepared to compile the project. Execute the commands:
 [Linux] Compiling TetriNET X Modern Server [../bin/tetrix-modern.linux]
 
 Well Done!
+
+___________________________________________________________________________
+
+Running as a systemd service (Linux)
+
+To manage the server with systemctl (start/stop/restart/status) instead of
+running it manually, see contrib/systemd/README.md.

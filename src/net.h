@@ -71,7 +71,7 @@ int expmem_net(void);
 
 
 /* puts full hostname in s */
-void getmyhostname(char *s);
+void getmyhostname(char *s, int len);
 
 
 /* get my ip number */
