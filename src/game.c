@@ -625,6 +625,9 @@ int gamewrite(void)
     fprintf(file_out,"#    Special Case:\n");
     fprintf(file_out,"#    join   4 = Can join other channels. Can't create new channel (unless authop)\n");
     fprintf(file_out,"#    set    4 = Chanop can only modify settings of NON-preset channels (unless authop)\n");
+    fprintf(file_out,"#    kick   An authenticated admin (/op or /admin) can ALWAYS use /kick,\n");
+    fprintf(file_out,"#           regardless of this setting -- including 0 (disabled for everyone\n");
+    fprintf(file_out,"#           else). This is intentional: /kick doubles as a moderation tool.\n");
     fprintf(file_out,"#\n");
     fprintf(file_out,"command_help=%d\n", game.command_help);
     fprintf(file_out,"command_clear=%d\n", game.command_clear);

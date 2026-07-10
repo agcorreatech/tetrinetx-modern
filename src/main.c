@@ -259,6 +259,18 @@ char can_use_set(struct net_t *n)
                   && (game.command_set==4) ) );
   }
 
+/* can_use_kick(n) - /kick also has a bonus rule on top of the normal
+   level check: an authenticated admin can ALWAYS use it, even if the
+   server owner has set command_kick=0 (disabled for everyone else).
+   /help needs this exact same check -- a naive
+   passed_level(n,game.command_kick) would show /kick to every player
+   whenever command_kick==0 (since passed_level(n,0) is trivially true
+   for anyone), which is backwards: 0 means disabled, not "everyone". */
+char can_use_kick(struct net_t *n)
+  {
+    return ( (game.command_kick>0 && passed_level(n,game.command_kick)) || passed_level(n,LEVEL_AUTHOP) );
+  }
+
 /* help_table[] - Data-driven list of every built-in command, used by /help.
    Each row is shown only if the REQUESTING player currently passes its
    check (custom_check if set, otherwise passed_level(n,*level_ptr); a NULL
@@ -289,7 +301,7 @@ struct help_entry_t help_table[] = {
   { "/set help",                     "Shows/changes channel config options",       NULL,                     can_use_set, 0 },
   { "/op <password>",                "Gain AUTHENTICATED OP status",               &game.command_op,         NULL, 0 },
   { "/admin <password>",             "Gain AUTHENTICATED OP status (alias /op)",   &game.command_op,         NULL, 0 },
-  { "/kick <playernumber(s)>",       "Kicks player(s) to the server's lobby",      &game.command_kick,       NULL, 0 },
+  { "/kick <playernumber(s)>",       "Kicks player(s) to the server's lobby",      NULL,                     can_use_kick, 0 },
 
   /* --- Admin commands (only shown once authenticated via /op or /admin) --- */
   { "/priority <1-99>",              "Changes channel priority",                   &game.command_priority,   NULL, 1 },
@@ -887,10 +899,19 @@ void net_connected(struct net_t *n, char *buf)
               {
                 valid_param=1;
                 /* First parse to see if it's a server command */
-                if ( !strncasecmp(MSG, "/kick", 5) && (game.command_kick > 0))
+                /* /kick stays at its default chanop-level requirement
+                   (command_kick=2) for everyone else, but an authenticated
+                   admin (/op or /admin) can ALWAYS use it, regardless of
+                   how command_kick is configured -- including the server
+                   owner setting command_kick=0 to disable it for everyone
+                   else. Without the "|| passed_level(n,LEVEL_AUTHOP)" on
+                   the outer gate, command_kick=0 would block admins too,
+                   since that check runs before passed_level() is ever
+                   consulted. */
+                if ( !strncasecmp(MSG, "/kick", 5) && ( (game.command_kick > 0) || passed_level(n,LEVEL_AUTHOP) ) )
                   {
                     valid_param=2;
-                    if ( passed_level(n,game.command_kick) )
+                    if ( (game.command_kick>0 && passed_level(n,game.command_kick)) || passed_level(n,LEVEL_AUTHOP) )
                       {
                         P=MSG+6;
                         while( (((*P)-'0') >= 1) && (((*P)-'0') <= 6) )
