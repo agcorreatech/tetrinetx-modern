@@ -1778,7 +1778,18 @@ void net_connected(struct net_t *n, char *buf)
                                     nsock=ochan->net;
                                     while (nsock!=NULL)
                                       {
-                                        if ( (nsock=n) && (nsock->type == NET_CONNECTED))
+                                        /* BUGFIX: this used to read "if ( (nsock=n) && ...)" -- an
+                                           assignment where a comparison was clearly intended. Two
+                                           problems: (1) it always evaluated true (an assignment
+                                           expression's value is the assigned value, non-NULL here),
+                                           and (2) it overwrote the loop iterator itself, so the very
+                                           next "nsock=nsock->next" advanced from n's position rather
+                                           than from where the loop actually was, corrupting the
+                                           traversal of ochan->net. No comparison against n is needed
+                                           here at all: by this point n has already been removed from
+                                           ochan->net (remnet(ochan,n) ran earlier in this same
+                                           handler), so it can never appear in this loop anyway. */
+                                        if (nsock->type == NET_CONNECTED)
                                           {
                                             tprintf(nsock->sock,"endgame\xff");
                                             nsock->status=STAT_NOTPLAYING;
@@ -2836,6 +2847,13 @@ void net_telnet_init(struct net_t *n, char *buf)
         lvprintf(9,"%s Disconnected due to invalid nickname: %s\n",n->host,n->nick);
         tprintf(n->sock, "noconnecting Nickname %s not allowed!\xff", n->nick);
         killsock(n->sock); lostnet(n);
+        /* BUGFIX: this was missing a return, so execution fell through
+           into every check below (nickname ban, version check, duplicate
+           nickname, channel assignment, ...) on a connection that had
+           already been told "not allowed" and had its socket killed --
+           every other equivalent check in this function already returns
+           immediately after killsock()+lostnet(), this one just didn't. */
+        return;
       }
 
     /* Ensure this nickname isn't banned (IP bans are already checked much
