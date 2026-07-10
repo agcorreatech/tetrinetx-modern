@@ -174,6 +174,19 @@ this one, since `/kick` stays at its original chanop-level default):
       automatically) rather than being disconnected or looping back into
       `#Lobby` — confirms the lobby search correctly excludes the room
       being kicked from, even when that room *is* the default lobby.
+- [ ] Set `command_kick=0` in `game.conf` (disables `/kick` for
+      everyone) and restart. As a normal player who happens to be
+      chanop, run `/kick <playernumber>` — **expected:** "You do NOT
+      have access to that command!" (and `/kick` no longer appears in
+      that player's `/help` either). As an **authenticated admin**
+      (`/op`/`/admin`), run the same `/kick <playernumber>` —
+      **expected:** it still works exactly as before, and `/kick`
+      still appears in that admin's `/help` (in the general section,
+      not under `--- Admin Commands ---` — `/kick`'s default,
+      chanop-level nature doesn't change just because this particular
+      config happens to make it admin-only in practice). Confirms
+      admins can always use `/kick` regardless of how `command_kick`
+      is configured, including fully disabled.
 
 ## 7. Admin-only moderation commands
 

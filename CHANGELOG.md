@@ -77,14 +77,19 @@ Maintainer / Developer: Alexandro G. Corrêa <alex.linux@gmail.com>
 - `/kick` itself stays at its original permission level (chanop / "OP by
   position", `command_kick=2`) -- unlike the admin-only commands below,
   this one is left as a lightweight, position-based moderation tool for
-  running the game smoothly.
+  running the game smoothly. An authenticated admin (`/op`/`/admin`) can
+  **always** use `/kick` regardless of this setting though, including
+  when `command_kick=0` (disabled for everyone else) -- `can_use_kick()`
+  encodes this bonus rule for both the command handler and `/help`, the
+  same pattern already used for `/set`'s own bonus rule (see below).
 - New: `create_channel()`, `find_or_create_lobby_channel()`,
   `move_player_to_channel()`, `add_kick_cooldown()`,
-  `is_kick_cooldown_active()` (`src/main.c`). `move_player_to_channel()`
-  is a new, self-contained function (not a refactor of `/join`'s existing
-  handler, to avoid any risk of regressing that already-working protocol
-  code path) that replays the same playerleave/playerjoin/field-resync
-  sequence `/join` already sends when a player switches channels.
+  `is_kick_cooldown_active()`, `can_use_kick()` (`src/main.c`).
+  `move_player_to_channel()` is a new, self-contained function (not a
+  refactor of `/join`'s existing handler, to avoid any risk of
+  regressing that already-working protocol code path) that replays the
+  same playerleave/playerjoin/field-resync sequence `/join` already
+  sends when a player switches channels.
 
 ### Extended (victory-only) winlist metrics + plain-text CSV export
 
