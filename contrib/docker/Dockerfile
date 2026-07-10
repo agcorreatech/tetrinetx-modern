@@ -3,15 +3,15 @@
 # TetriNET X Modern Server - Docker build
 #
 # Uso (a partir da raiz do repositório):
-#   docker build -f docker/Dockerfile -t tetrinetx .
+#   docker build -f contrib/docker/Dockerfile -t tetrinetx .
 #   docker run -d --init --name tetrinetx -p 31457:31457 -p 31456:31456 tetrinetx
 #
 # O --init é importante: o binário do tetrinetx faz seu próprio "double-fork"
-# ao daemonizar (ver docker/entrypoint.sh e docker/README.md), e sem um init
-# de verdade como PID 1 do container, o processo órfão gerado por esse
-# double-fork pode ficar temporariamente como zumbi até ser colhido.
+# ao daemonizar (ver contrib/docker/entrypoint.sh e contrib/docker/README.md),
+# e sem um init de verdade como PID 1 do container, o processo órfão gerado
+# por esse double-fork pode ficar temporariamente como zumbi até ser colhido.
 #
-# Veja docker/README.md para docker-compose e mais detalhes.
+# Veja contrib/docker/README.md para docker-compose e mais detalhes.
 
 # ---------------------------------------------------------------------------
 # Etapa 1: build - compila o binario com o compilador C
@@ -48,7 +48,7 @@ WORKDIR /opt/tetrinetx
 COPY --from=build /src/bin/tetrix-modern.linux ./tetrix-modern.linux
 COPY bin/game.conf ./defaults/game.conf
 COPY bin/game.motd ./defaults/game.motd
-COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY contrib/docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 RUN mkdir -p /data && \
     chmod +x /usr/local/bin/entrypoint.sh ./tetrix-modern.linux && \

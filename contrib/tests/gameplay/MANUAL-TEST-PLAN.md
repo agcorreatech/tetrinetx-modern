@@ -1,0 +1,249 @@
+# Manual gameplay test plan
+
+These tests require a real, authenticated TetriNET game session (the
+encrypted `tetrisstart` INIT handshake — see `src/crack.c` — makes this
+impractical to script for this pass; see `contrib/tests/README.md`). Run them
+with a real TetriNET 1.13 client (the Windows client bundled at
+`tetrinet_windows_client_v1.13/`, or any compatible client) connected to
+a locally-built server.
+
+## Setup
+
+```bash
+cd src && sed -i -e 's/\r$//' compile.linux && bash compile.linux && cd ..
+mkdir -p /tmp/tetrinetx-manual-test && cp bin/tetrix-modern.linux /tmp/tetrinetx-manual-test/
+cd /tmp/tetrinetx-manual-test && ./tetrix-modern.linux
+```
+
+Point your TetriNET client at `127.0.0.1`, port `31457`. Use at least
+**two** client instances/windows for anything involving more than one
+player (most of this plan). A quick way to get a second, distinctly
+named connection is simply opening the client twice with a different
+nickname each time.
+
+Tear down between unrelated test sections by stopping the server
+(`pkill tetrix-modern.linux`) and deleting the generated `game.*` files,
+so each section starts from a clean slate unless it says otherwise.
+
+---
+
+## 1. Connecting, chat, basics
+
+- [ ] Connect with nickname `alice`. Confirm you land in channel `#tetrinet`.
+- [ ] Connect a second client with nickname `alice` again (same, exact
+      spelling). **Expected:** rejected with "Nickname already exists on
+      server!" — confirms nicknames are unique server-wide (this is what
+      the `/op`/`/admin` nickname-based auth below relies on).
+- [ ] Send a partyline chat message from `alice`. Confirm the second
+      client (`bob`, connected normally) sees it.
+- [ ] `/me waves` — confirm it shows as an action (not a plain chat line)
+      to other players.
+
+## 2. `/help` (filtered by current permission)
+
+- [ ] As a normal (unauthenticated) player, run `/help`. **Expected:**
+      only commands your current level can use are listed — no
+      `--- Admin Commands ---` section at all, and no `/priority`,
+      `/clear`, `/persistant`, `/save`, `/reset`, `/ban`, `/unban`,
+      `/banlist` (all admin-only by default now).
+- [ ] Note whether you're the channel's chanop (lowest gameslot number,
+      i.e. first to join — "OP by position", no password needed). If so,
+      confirm `/kick` **is** listed (it's chanop-level, not admin-only).
+- [ ] After authenticating as admin (section 3below), run `/help` again.
+      **Expected:** the same list as before, **plus** a
+      `--- Admin Commands ---` section listing `/priority`, `/clear`,
+      `/persistant`, `/save`, `/reset`, `/ban`, `/unban`, `/banlist`.
+- [ ] Confirm `/set help` still appears in `/help` for the chanop of a
+      *non-persistent* channel even without authenticating as admin (the
+      `can_use_set()` bonus rule) — this is the one command with a
+      permission rule more complex than a plain level check.
+
+## 3. `/op` / `/admin` (multi-admin, nickname-implicit auth)
+
+Stop the server, edit `game.secure` to:
+
+```
+[alice]
+password=alicepass
+
+[bob]
+password=bobpass
+```
+
+(passwords capped at 11 characters — `PASSLEN` in `src/main.h` — longer
+values are silently truncated). Restart the server.
+
+- [ ] Connect with nickname `alice`, run `/op alicepass`. **Expected:**
+      "Your security level is now: AUTHENTICATED OP".
+- [ ] Connect with nickname `alice`, run `/op bobpass` (the wrong
+      password for this nick). **Expected:** "Invalid Password!".
+- [ ] Connect with nickname `mallory` (not a registered admin at all),
+      run `/op alicepass` (a valid password, but for a different
+      nickname). **Expected:** "Invalid Password!" — confirms the
+      password alone isn't enough; the nickname must match too.
+- [ ] Repeat the successful case using `/admin alicepass` instead of
+      `/op alicepass`. **Expected:** identical success behaviour — `/op`
+      and `/admin` are the same command under two names.
+- [ ] Restart the server with a **legacy-format** `game.secure`
+      (`op_password=somepass`, no `[nickname]` block) and confirm: (a)
+      the server logs a migration message, (b) `game.secure` is
+      rewritten with a `[admin]` block containing that password, and
+      (c) `/op somepass` now requires connecting with the nickname
+      `admin` specifically to succeed.
+
+## 4. `/who` and `/whois <nickname>`
+
+With `alice` and `bob` both connected (in the same or different
+channels):
+
+- [ ] `/who` as `alice` — confirm both players are listed, with host/IP
+      column present **only** if `alice` is currently an authenticated
+      admin (section 3) or chanop.
+- [ ] `/whois bob` — confirm team, channel, gameslot, status
+      (not playing / playing / lost), and client version are shown.
+      Confirm host/IP is shown only when `alice` is an authenticated
+      admin.
+- [ ] `/whois nonexistentnick` — confirm "No such player: nonexistentnick".
+- [ ] Start a game (section 6) and run `/whois` on a currently-playing
+      player — confirm a "Level" line appears (absent when not playing).
+
+## 5. `/ban`, `/unban`, `/banlist` (admin-only)
+
+As an authenticated admin (section 3), with `bob` connected in the same
+channel:
+
+- [ ] `/ban <bob's gameslot> testing the ban command` — confirm: (a) bob
+      is disconnected immediately, (b) the channel sees a "was banned"
+      message with the reason, (c) bob's client shows "You have been
+      banned: testing the ban command" just before disconnecting.
+- [ ] Try reconnecting as `bob` from the same machine. **Expected:**
+      rejected — either by the IP ban (if reconnecting fast enough that
+      the OS reuses the same source characteristics) or, regardless of
+      IP/network, by the **nickname** ban as soon as the nickname `bob`
+      is sent in the INIT string. Try connecting with a *different*
+      nickname from the same machine — **expected:** this succeeds (only
+      `bob` the nickname, and the specific banned IP, are blocked — not
+      the whole machine under every possible nickname).
+- [ ] `/banlist` — confirm two entries are listed for this ban: one
+      `IP` type and one `NICK` type, both showing the same date, admin
+      nickname, and reason.
+- [ ] As a **non-admin** player, run `/banlist`. **Expected:** "You do
+      NOT have access to that command!".
+- [ ] `/unban nick bob` — confirm `/banlist` now shows only the `IP`
+      entry (the `NICK` one is gone). Confirm `bob` can reconnect with
+      that nickname again (from a different source IP, or after the IP
+      ban is separately lifted).
+- [ ] `/unban ip 12.34.56.78` (an IP that was never banned) — confirm
+      "No matching ban entry found for (ip): 12.34.56.78".
+- [ ] Inspect `game.ban` on disk — confirm the `[BAN]` block format
+      (`type=`, `target=`, `date=`, `admin=`, `reason=`), matching what
+      `/banlist` reported.
+
+## 6. `/kick` — lobby redirect + 5-minute rejoin cooldown
+
+As the channel's chanop (OP by position — no `/op`/`/admin` needed for
+this one, since `/kick` stays at its original chanop-level default):
+
+- [ ] With `bob` connected in `#tetrinet`, run `/kick <bob's gameslot>`.
+      **Expected:** bob is **not disconnected** — his client receives
+      messages that he was kicked from `#tetrinet` and cannot rejoin for
+      5 minutes, and is moved to `#Lobby`. Confirm `bob`'s client shows
+      him now in `#Lobby` (via `/who` or the client's own channel
+      display), still connected and able to chat/join other channels.
+- [ ] As `bob` (still connected, now in `#Lobby`), try `/join #tetrinet`
+      (the room he was just kicked from). **Expected:** rejected with a
+      message saying he can't rejoin yet, with roughly how long is left.
+- [ ] `/join` any **other** channel (not `#tetrinet`, not `#Lobby`) —
+      confirm this succeeds normally (the cooldown only blocks the
+      specific room kicked from).
+- [ ] Disconnect `bob` entirely and reconnect with the **same nickname**
+      `bob` before the 5 minutes are up, then try `/join #tetrinet`
+      again. **Expected:** still rejected — the cooldown is keyed by
+      nickname, not by connection, so it survives the reconnect.
+- [ ] Wait for the 5 minutes to elapse (or, for a faster test, restart
+      the server with a shorter `KICK_COOLDOWN_SECS` temporarily
+      recompiled — note cooldowns are in-memory only and don't survive a
+      server restart either way), then confirm `bob` can `/join
+      #tetrinet` again normally.
+- [ ] Fill `#Lobby` to `maxplayers`, then kick a player from a different,
+      unrelated room. **Expected:** they land in `#Lobby1` instead
+      (created automatically), not in the full `#Lobby`.
+- [ ] With only `#Lobby` existing, kick a player who is **currently in
+      `#Lobby` itself** (e.g. an chanop of Lobby kicks someone there).
+      **Expected:** the kicked player lands in `#Lobby1` (created
+      automatically) rather than being disconnected or looping back into
+      `#Lobby` — confirms the lobby search correctly excludes the room
+      being kicked from, even when that room *is* the default lobby.
+
+## 7. Admin-only moderation commands
+
+As an authenticated admin (section 3):
+
+- [ ] `/priority 75` — confirm it works. As a **non-admin** chanop
+      (OP by position only, no `/op`), confirm the same command is now
+      **rejected** ("You do NOT have access to that command!") — this
+      moved from chanop-level to admin-only in this release.
+- [ ] `/clear` — confirm the winlist is cleared and all connected
+      players receive the updated (empty) winlist.
+- [ ] `/persistant 1` then `/save` — confirm the channel is written into
+      `game.conf` as a `[CHANNELNAME]` preset block.
+- [ ] `/reset` — confirm channel config reloads from `game.conf` (e.g. a
+      manually-edited setting takes effect without a server restart).
+- [ ] Repeat each of the above as a non-admin — confirm all four are
+      rejected the same way `/priority` is above.
+
+## 8. `/topic`, `/list`, `/join`, `/msg`, `/move`, `/set`
+
+- [ ] `/topic Friendly game night` — confirm it shows in `/list`.
+- [ ] `/list` — confirm channel name, player count, priority, and topic
+      are shown, with the current channel highlighted.
+- [ ] `/join #newroom` — confirm a new channel is created and you're
+      moved into it (gameslot reassigned, `/who` reflects the new
+      channel).
+- [ ] `/msg <playernumber> hello there` — confirm only that player
+      receives the private message.
+- [ ] `/move <playernumber> <newnumber>` — confirm the player's gameslot
+      changes and everyone's player list updates accordingly.
+- [ ] `/set help` then a couple of `/set <option> <value>` calls —
+      confirm channel-specific settings (e.g. `starting_level`) take
+      effect in the next game.
+
+## 9. Gameplay: starting a game, winning, single-player fix
+
+- [ ] With 2+ players in a channel, start a game. Play until one player
+      tops out (loses). **Expected:** the loser gets `playerlost`
+      broadcast, the game continues for the remaining player(s).
+- [ ] Let the game finish normally with 2 players (one wins). Confirm:
+      (a) `/winlist` shows the winner with an updated score on **both**
+      clients (the winlist-broadcast fix from Release 03/04 — every
+      connected player receives it, not just the first one in the
+      channel's internal list), (b) the server announces the winner via
+      partyline if `serverannounce` is on.
+- [ ] With exactly **one** player in a channel, start a game and
+      deliberately lose (top out). **Expected:** the game ends cleanly
+      (not stuck in `STATE_INGAME` forever) and the partyline shows
+      "Game Over - no winner" — this is the single-player endgame fix.
+
+## 10. Winlist: extended metrics + CSV export
+
+After at least one completed game with a winner (section 9):
+
+- [ ] Inspect `game.winlist.csv` in the server's working directory.
+      Confirm the header row `rank,type,name,score,wins,last_win,
+      best_level,avg_level` and one data row per winlist entry.
+- [ ] Confirm `wins` incremented, `last_win` shows a recent
+      human-readable timestamp, and `best_level`/`avg_level` reflect the
+      level reached when that entry won (requires the game client to
+      have sent at least one `lvl` update during the winning game — most
+      clients do this automatically as the player levels up).
+- [ ] Play a second game where the **same** player/team wins again,
+      reaching a different level than the first win. Confirm `wins`
+      incremented to 2, `avg_level` is the average of both wins'
+      levels, and `best_level` reflects whichever of the two was higher.
+- [ ] Confirm the **in-game** `/winlist` command and the TetriNET
+      client's own winlist display are completely unaffected by any of
+      this — they show only name and score, exactly as before this
+      release.
+- [ ] Set `winlist_export_txt=0` in `game.conf`, restart, `/clear` the
+      winlist (or finish another game). Confirm `game.winlist.csv` is
+      **not** rewritten (the export is now disabled).

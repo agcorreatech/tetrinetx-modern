@@ -1,9 +1,9 @@
 # TetriNET X Modern Server - docker-compose
 #
 # Uso (a partir da raiz do repositório, com o Docker Desktop rodando):
-#   docker compose -f docker/docker-compose.yml up -d --build
-#   docker compose -f docker/docker-compose.yml logs -f
-#   docker compose -f docker/docker-compose.yml down
+#   docker compose -f contrib/docker/docker-compose.yml up -d --build
+#   docker compose -f contrib/docker/docker-compose.yml logs -f
+#   docker compose -f contrib/docker/docker-compose.yml down
 #
 # No Docker Desktop, depois do "up", o serviço "tetrinetx" aparece na aba
 # Containers, com os logs e as portas mapeadas visíveis na interface.
@@ -11,16 +11,17 @@
 services:
   tetrinetx:
     build:
-      context: ..
-      dockerfile: docker/Dockerfile
+      context: ../..
+      dockerfile: contrib/docker/Dockerfile
     image: tetrinetx:local
     container_name: tetrinetx
     restart: unless-stopped
     # Importante: o binário faz seu próprio "double-fork" ao daemonizar (ver
-    # docker/entrypoint.sh e docker/README.md). Sem um init de verdade como
-    # PID 1 do container, o processo órfão gerado por esse double-fork pode
-    # ficar temporariamente como zumbi até ser colhido. init: true ativa o
-    # tini embutido do Docker para lidar com isso corretamente.
+    # contrib/docker/entrypoint.sh e contrib/docker/README.md). Sem um init de
+    # verdade como PID 1 do container, o processo órfão gerado por esse
+    # double-fork pode ficar temporariamente como zumbi até ser colhido.
+    # init: true ativa o tini embutido do Docker para lidar com isso
+    # corretamente.
     init: true
     ports:
       - "31457:31457"   # porta do jogo (telnet)

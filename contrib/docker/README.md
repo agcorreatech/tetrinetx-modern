@@ -27,7 +27,7 @@ Server** dentro de um container Docker.
 A partir da **raiz do repositório**:
 
 ```bash
-docker compose -f docker/docker-compose.yml up -d --build
+docker compose -f contrib/docker/docker-compose.yml up -d --build
 ```
 
 Isso vai:
@@ -41,10 +41,10 @@ Isso vai:
 Outros comandos úteis:
 
 ```bash
-docker compose -f docker/docker-compose.yml logs -f      # acompanhar logs em tempo real
-docker compose -f docker/docker-compose.yml restart      # reiniciar o servidor
-docker compose -f docker/docker-compose.yml down         # parar e remover o container (mantém o volume/dados)
-docker compose -f docker/docker-compose.yml down -v      # parar e remover TAMBÉM o volume (apaga winlist/config)
+docker compose -f contrib/docker/docker-compose.yml logs -f      # acompanhar logs em tempo real
+docker compose -f contrib/docker/docker-compose.yml restart      # reiniciar o servidor
+docker compose -f contrib/docker/docker-compose.yml down         # parar e remover o container (mantém o volume/dados)
+docker compose -f contrib/docker/docker-compose.yml down -v      # parar e remover TAMBÉM o volume (apaga winlist/config)
 ```
 
 ## Usando o Docker Desktop (interface gráfica)
@@ -70,7 +70,7 @@ Desktop:
 Também a partir da raiz do repositório:
 
 ```bash
-docker build -f docker/Dockerfile -t tetrinetx .
+docker build -f contrib/docker/Dockerfile -t tetrinetx .
 docker run -d --init --name tetrinetx \
   -p 31457:31457 -p 31456:31456 \
   -v tetrinetx-data:/data \
@@ -94,7 +94,7 @@ container. Para editar `game.conf` (por exemplo, mudar `maxchannels` ou
 `verbose`) sem precisar reconstruir a imagem:
 
 ```bash
-docker compose -f docker/docker-compose.yml exec tetrinetx sh -c "cat /data/game.conf"
+docker compose -f contrib/docker/docker-compose.yml exec tetrinetx sh -c "cat /data/game.conf"
 ```
 
 Edite localmente e copie de volta, ou edite diretamente pela aba **Files**
@@ -102,7 +102,7 @@ do Docker Desktop (Containers → tetrinetx → Files → `/data`). Depois,
 reinicie o container para a nova configuração ser lida:
 
 ```bash
-docker compose -f docker/docker-compose.yml restart
+docker compose -f contrib/docker/docker-compose.yml restart
 ```
 
 ## Por que existe um `entrypoint.sh`?

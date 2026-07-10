@@ -29,3 +29,35 @@ Programs
 	contrib/systemd/README.md for details.
 
 
+* contrib/docker 	(agcorreatech - 2026)
+	Dockerfile, docker-compose.yml, and entrypoint.sh to build and run
+	tetrinetx in a container (Docker / Docker Desktop). Moved here from
+	the repository root (was docker/) to keep all deployment/tooling
+	extras grouped under contrib/, alongside systemd. See
+	contrib/docker/README.md for details. Build from the repository
+	root: `docker compose -f contrib/docker/docker-compose.yml up -d
+	--build`.
+
+
+* contrib/tests 	(agcorreatech - 2026)
+	End-to-end test documentation and automation for the server: two
+	runnable scripts (config-migration/, query-port/) plus a manual
+	test checklist (gameplay/MANUAL-TEST-PLAN.md) for everything that
+	needs a real, authenticated TetriNET game session. Moved here from
+	the repository root (was tests/) for the same reason as
+	contrib/docker above. See contrib/tests/README.md for details.
+
+
+Historical Reference
+---------------------
+
+* contrib/OLD.HISTORY, contrib/OLD.WISHLIST 	(moved here - 2026)
+	These are the original build-by-build changelog (1998-1999) and
+	the original feature wishlist from the very first tetrinetx author.
+	They are kept here purely as historical reference (e.g. to see when
+	and why a given behaviour was first introduced, or what was once
+	requested but never built). They are NOT maintained anymore and do
+	NOT reflect the current state of the project -- see CHANGELOG.md in
+	the repository root for the current, maintained changelog.
+
+
