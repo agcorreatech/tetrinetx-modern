@@ -18,8 +18,12 @@
 # ---------------------------------------------------------------------------
 FROM ubuntu:24.04 AS build
 
+# build-essential (não só "gcc") -- garante libc6-dev junto (headers como
+# signal.h, stdio.h, etc), que o pacote "gcc" sozinho nem sempre traz com
+# --no-install-recommends. Sem isso o build falha com
+# "fatal error: signal.h: No such file or directory".
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc && \
+    apt-get install -y --no-install-recommends build-essential && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
