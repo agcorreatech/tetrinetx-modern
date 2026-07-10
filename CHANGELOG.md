@@ -155,6 +155,43 @@ Maintainer / Developer: Alexandro G. Corrêa <alex.linux@gmail.com>
   `Release NN - DD/Mon/YYYY` headings (matching Releases 01-03 below)
   instead of `Unreleased`, and credits the current maintainer.
 
+### Additional bugfixes found during review (unrelated to the above)
+
+- `src/main.c`, `/join` handler: `if ((nsock=n) && (nsock->type==
+  NET_CONNECTED))` was an assignment where a comparison was clearly
+  intended. It always evaluated true and, worse, overwrote the loop's own
+  iterator variable, corrupting the traversal of `ochan->net` in the
+  block that ends the old channel's game when a player leaves. No
+  comparison against `n` was actually needed there (`n` had already been
+  removed from that list by `remnet()` earlier in the same handler), so
+  simplified to just `nsock->type == NET_CONNECTED`.
+- `src/main.c`, `net_connected()`: the reserved-nickname (`"server"`)
+  check called `killsock()`+`lostnet()` but fell through without a
+  `return;`, continuing into every subsequent check (nickname ban,
+  version check, duplicate nickname, channel assignment...) on a
+  connection that had already been told "not allowed" and had its
+  socket killed. Every other equivalent check in this function already
+  returns immediately after `killsock()`+`lostnet()`; this one didn't.
+
+### `tests/` -- end-to-end test documentation and automation
+
+- `tests/README.md`: overview, explains why the TetriNET encrypted INIT
+  handshake makes full protocol-level scripting out of scope for this
+  pass, quick-start, coverage table.
+- `tests/config-migration/run.sh`: automated -- fresh-install `game.conf`
+  defaults (every new tag above), legacy `game.secure`/`game.ban`
+  migration, and a live IP ban actually rejecting a real TCP connection.
+- `tests/query-port/run.sh`: automated -- the plain-text query commands
+  (`playerquery`/`version`/`listchan`/`listuser`/`getwinlist`). Also
+  documents a finding: these do **not** need the separate query port
+  (31456) -- that port isn't listening at all currently
+  (`init_query_port()` is commented out in `main()`); the commands
+  actually work on the regular game port, 31457.
+- `tests/gameplay/MANUAL-TEST-PLAN.md`: step-by-step checklist for
+  everything needing a real authenticated game session (every feature
+  above, plus `/topic`/`/list`/`/join`/`/msg`/`/move`/`/set`, starting a
+  game and winning, and the single-player endgame fix).
+
 _________________________________________________________________________________
 
 ## Release 03 - 24/Jun/2023
