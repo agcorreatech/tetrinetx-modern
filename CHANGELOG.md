@@ -197,6 +197,43 @@ Maintainer / Developer: Alexandro G. Corrêa <alex.linux@gmail.com>
   above, plus `/topic`/`/list`/`/join`/`/msg`/`/move`/`/set`, starting a
   game and winning, and the single-player endgame fix).
 
+### Startup (boot) debug logging
+
+- Every initialization step in `main()` is now logged with a `BOOT:`
+  prefix **before** it runs (13 numbered steps: config, network buffers,
+  port binding, winlist/stats/security/banlist loading, motd, admin
+  accounts) -- so if the process dies mid-startup, the last `BOOT:` line
+  tells you exactly which step failed. Messages go to **both** stdout
+  and `game.log` (everything happens before the daemonizing `fork()`,
+  so stdout is still attached), because the two most common startup
+  failures each blind exactly one of the two channels: a non-writable
+  working directory silently disables `game.log` (its writer ignores
+  `fopen()` failures), while a service manager hides stdout.
+- New early environment check (`boot_check_environment()`): logs the
+  working directory (with a reminder that *all* `game.*` files are
+  read/written relative to it) and probes it for writability up front --
+  failing immediately with the exact `errno` reason and a how-to-fix
+  message, instead of a series of confusing downstream failures in
+  `gamewrite()`/`writepid()`/the log itself.
+- If `game.log` can't be opened, that is now announced loudly on stdout
+  once (previously: silently ignored, leaving an empty/missing log with
+  no explanation).
+- Port-bind failure (`init_telnet_port()`) now prints the three most
+  common causes with ready-to-run diagnostic commands (server already
+  running / port in use by another process / bad `bindip` in
+  `game.conf`), instead of just "Couldn't find telnet port".
+- The post-daemonization "Wrote PID" message was only logged at
+  verbosity 9 (default is 4), so the daemon's successful startup never
+  actually appeared in the log; now logged at priority 1 as
+  `BOOT: Daemon running (pid N) ... Startup complete.` -- the milestone
+  the pre-fork messages tell the user to watch for.
+- Verified by really exercising all three paths: a clean boot (13 steps
+  visible on stdout and in `game.log`, ending with the daemon-running
+  milestone), a port-conflict boot (fails at step 4/13 with the full
+  diagnosis), and a read-only-directory boot as an unprivileged user
+  (immediate fatal with `Permission denied`, correct explanation, and
+  the log-unavailable warning on stdout).
+
 ### Fixed: Docker files broken by CRLF on Windows checkouts
 
 - The repository had no `.gitattributes`, so on a Windows machine with
