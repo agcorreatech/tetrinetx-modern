@@ -173,24 +173,43 @@ Maintainer / Developer: Alexandro G. Corrêa <alex.linux@gmail.com>
   socket killed. Every other equivalent check in this function already
   returns immediately after `killsock()`+`lostnet()`; this one didn't.
 
-### `tests/` -- end-to-end test documentation and automation
+### `contrib/tests/` -- end-to-end test documentation and automation
 
-- `tests/README.md`: overview, explains why the TetriNET encrypted INIT
+- `contrib/tests/README.md`: overview, explains why the TetriNET encrypted INIT
   handshake makes full protocol-level scripting out of scope for this
   pass, quick-start, coverage table.
-- `tests/config-migration/run.sh`: automated -- fresh-install `game.conf`
+- `contrib/tests/config-migration/run.sh`: automated -- fresh-install `game.conf`
   defaults (every new tag above), legacy `game.secure`/`game.ban`
   migration, and a live IP ban actually rejecting a real TCP connection.
-- `tests/query-port/run.sh`: automated -- the plain-text query commands
+- `contrib/tests/query-port/run.sh`: automated -- the plain-text query commands
   (`playerquery`/`version`/`listchan`/`listuser`/`getwinlist`). Also
   documents a finding: these do **not** need the separate query port
   (31456) -- that port isn't listening at all currently
   (`init_query_port()` is commented out in `main()`); the commands
   actually work on the regular game port, 31457.
-- `tests/gameplay/MANUAL-TEST-PLAN.md`: step-by-step checklist for
+- `contrib/tests/gameplay/MANUAL-TEST-PLAN.md`: step-by-step checklist for
   everything needing a real authenticated game session (every feature
   above, plus `/topic`/`/list`/`/join`/`/msg`/`/move`/`/set`, starting a
   game and winning, and the single-player endgame fix).
+
+### `docker/` and `tests/` moved into `contrib/`
+
+- Both folders moved to `contrib/docker/` and `contrib/tests/`
+  respectively (`git mv`, history preserved), grouping all
+  deployment/tooling extras under `contrib/` alongside `contrib/systemd/`.
+  All internal cross-references (`docker-compose.yml`'s build `context`
+  and `dockerfile` path, the `Dockerfile`'s own `COPY` of
+  `entrypoint.sh`, both `run.sh` scripts' repo-root detection, and every
+  command example in the READMEs and this changelog) were updated for
+  the new depth. `.dockerignore` was narrowed from excluding all of
+  `contrib/` to excluding only the specific subfolders not needed by the
+  image (`contrib/systemd/`, `contrib/tests/`, `contrib/query/`,
+  `contrib/OLD.HISTORY`, `contrib/OLD.WISHLIST`, `contrib/README`),
+  since the Dockerfile and entrypoint script themselves now live inside
+  `contrib/docker/` and need to remain part of the build context.
+  Documented in `contrib/README`.
+- `bin/tetrix-modern.linux` updated to a freshly-built binary reflecting
+  every change in this release (including the two bugfixes above).
 
 _________________________________________________________________________________
 

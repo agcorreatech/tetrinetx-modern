@@ -32,10 +32,10 @@ Because of that, this folder is split in two:
 cd src && sed -i -e 's/\r$//' compile.linux && bash compile.linux && cd ..
 
 # Scriptable tests
-bash tests/config-migration/run.sh
-bash tests/query-port/run.sh
+bash contrib/tests/config-migration/run.sh
+bash contrib/tests/query-port/run.sh
 
-# Manual tests: see tests/gameplay/MANUAL-TEST-PLAN.md
+# Manual tests: see contrib/tests/gameplay/MANUAL-TEST-PLAN.md
 ```
 
 Both `run.sh` scripts start their own throwaway copy of the server in a

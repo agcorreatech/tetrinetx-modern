@@ -2,7 +2,7 @@
 
 These tests require a real, authenticated TetriNET game session (the
 encrypted `tetrisstart` INIT handshake — see `src/crack.c` — makes this
-impractical to script for this pass; see `tests/README.md`). Run them
+impractical to script for this pass; see `contrib/tests/README.md`). Run them
 with a real TetriNET 1.13 client (the Windows client bundled at
 `tetrinet_windows_client_v1.13/`, or any compatible client) connected to
 a locally-built server.

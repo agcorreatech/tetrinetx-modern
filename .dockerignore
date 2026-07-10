@@ -17,4 +17,12 @@ bin/game.secure
 # Cliente Windows não é usado pela imagem do servidor
 tetrinet_windows_client_v1.13/
 
-contrib/
+# De contrib/, só precisamos de contrib/docker/ (onde este próprio Dockerfile
+# e o entrypoint.sh vivem) dentro do contexto de build -- o restante não é
+# usado pela imagem.
+contrib/OLD.HISTORY
+contrib/OLD.WISHLIST
+contrib/README
+contrib/query/
+contrib/systemd/
+contrib/tests/

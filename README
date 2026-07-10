@@ -64,4 +64,4 @@ ___________________________________________________________________________
 Running with Docker / Docker Desktop
 
 To build and run the server in a container instead of compiling it
-locally, see docker/README.md.
+locally, see contrib/docker/README.md.
