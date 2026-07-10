@@ -54,7 +54,14 @@ COPY bin/game.conf ./defaults/game.conf
 COPY bin/game.motd ./defaults/game.motd
 COPY contrib/docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
-RUN mkdir -p /data && \
+# Normaliza defensivamente eventuais quebras de linha CRLF no entrypoint.sh
+# (ex: um checkout feito no Windows antes do .gitattributes deste repositório
+# existir, ou uma edição futura com um editor que insira CRLF). Sem isso, o
+# shebang "#!/usr/bin/env bash" viraria "#!/usr/bin/env bash\r" -- um
+# interpretador inválido -- e o container falharia silenciosamente ao tentar
+# rodar o entrypoint.
+RUN sed -i -e 's/\r$//' /usr/local/bin/entrypoint.sh && \
+    mkdir -p /data && \
     chmod +x /usr/local/bin/entrypoint.sh ./tetrix-modern.linux && \
     chown -R tetrinetx:tetrinetx /opt/tetrinetx /data
 

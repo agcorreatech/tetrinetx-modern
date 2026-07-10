@@ -197,6 +197,41 @@ Maintainer / Developer: Alexandro G. Corrêa <alex.linux@gmail.com>
   above, plus `/topic`/`/list`/`/join`/`/msg`/`/move`/`/set`, starting a
   game and winning, and the single-player endgame fix).
 
+### Fixed: Docker files broken by CRLF on Windows checkouts
+
+- The repository had no `.gitattributes`, so on a Windows machine with
+  Git's default `core.autocrlf=true`, every text file -- including
+  `contrib/docker/entrypoint.sh` -- got checked out with CRLF line
+  endings. `docker build`/`docker compose up` then copied that CRLF
+  version straight into the Linux image, turning the shebang
+  `#!/usr/bin/env bash` into `#!/usr/bin/env bash\r` (not a valid
+  interpreter), so the container failed to start.
+- Added `.gitattributes`: forces LF for everything by default (so this
+  can't recur for any current or future text file), with two explicit
+  exceptions preserving the project's actual, deliberate conventions:
+  `src/*.c`/`src/*.h` and `contrib/query/src/*` keep their original CRLF
+  (`-text`, i.e. no normalization at all -- `eol=crlf` alone would
+  *not* have been enough here, since the general `text=auto` rule would
+  still normalize the stored blob to LF regardless; confirmed this the
+  hard way while writing the fix), and `bin/tetrix-modern.linux` /
+  `tetrinet_windows_client_v1.13/*.zip` are marked `binary`.
+- Ran `git add --renormalize .` to apply the new rules to already-
+  tracked files. Besides the Docker files, this also normalized five
+  other plain files that had CRLF for no particular reason
+  (`.gitignore`, `README`, `contrib/README`, `contrib/OLD.HISTORY`,
+  `contrib/OLD.WISHLIST`) to LF; the deliberately-CRLF source files
+  above were correctly left untouched.
+- `contrib/docker/Dockerfile`'s runtime stage now also strips any `\r`
+  from `entrypoint.sh` defensively (`sed -i -e 's/\r$//'`) right after
+  copying it in, as a second layer of protection against this same
+  class of problem (e.g. an existing Windows checkout made before this
+  `.gitattributes` existed, or a future edit made with a CRLF-inserting
+  editor).
+- Verified: full clean compile (source files' CRLF confirmed
+  unaffected); manually reproduced the failure mode (a CRLF copy of
+  `entrypoint.sh`) and confirmed the Dockerfile's new `sed` step fixes
+  it (`bash -n` passes after normalization, failed before).
+
 ### Eliminated remaining `-Wstringop-truncation`/`-Wformat-truncation` warnings
 
 - Five bounded-copy call sites (two new admin-password copies in

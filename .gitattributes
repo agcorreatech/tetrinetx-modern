@@ -1,0 +1,33 @@
+# .gitattributes
+#
+# Sem este arquivo, um checkout no Windows com a configuração padrão do Git
+# (core.autocrlf=true) converte arquivos de texto de LF para CRLF -- o que
+# quebra scripts shell (ex: contrib/docker/entrypoint.sh) quando copiados
+# para dentro de um container Linux: o shebang "#!/usr/bin/env bash" vira
+# "#!/usr/bin/env bash\r", um interpretador inválido.
+#
+# Regra geral: força LF em tudo que é texto, EXCETO o código-fonte original
+# em src/ e contrib/query/src/ (que usa CRLF de propósito desde a base
+# histórica do projeto -- todo processo de build já normaliza isso via
+# 'sed' antes de compilar, ver src/compile.linux e
+# contrib/docker/Dockerfile). Para esses, usamos "-text": desativa
+# qualquer normalização de quebra de linha, preservando os bytes
+# exatamente como estão no repositório, em qualquer plataforma.
+# (Nota: "eol=crlf" sozinho NÃO seria suficiente aqui -- ele só afeta o
+# checkout, mas "text=auto" da regra geral ainda normalizaria o conteúdo
+# armazenado no objeto git para LF; "-text" evita isso por completo.)
+
+* text=auto eol=lf
+
+# Código-fonte original: CRLF de propósito, nunca normalizar
+src/*.c                        -text
+src/*.h                        -text
+contrib/query/src/*.c          -text
+contrib/query/src/compile.linux -text
+
+# Binários: nunca mexer em quebra de linha
+bin/tetrix-modern.linux                              binary
+tetrinet_windows_client_v1.13/*.zip                  binary
+*.png binary
+*.jpg binary
+*.ico binary
