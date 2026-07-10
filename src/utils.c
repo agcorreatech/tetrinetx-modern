@@ -45,3 +45,15 @@ void *nmalloc(int size)
   }
   return x;
 } 
+
+/* safe_strcpy(dest, destsize, src) - see utils.h for why this exists
+   instead of a direct strncpy()/snprintf() call at each use site. */
+void safe_strcpy(char *dest, size_t destsize, const char *src)
+  {
+    size_t len;
+    if (destsize == 0) return;
+    len = strlen(src);
+    if (len >= destsize) len = destsize - 1;
+    memcpy(dest, src, len);
+    dest[len] = 0;
+  }

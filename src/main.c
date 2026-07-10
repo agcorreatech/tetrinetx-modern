@@ -1378,7 +1378,7 @@ void net_connected(struct net_t *n, char *buf)
                         P=MSG+7;
                         if (strlen(MSG)>=7)
                           {
-                            strncpy(n->channel->description, P, DESCRIPTIONLEN-1); n->channel->description[DESCRIPTIONLEN-1]=0;
+                            safe_strcpy(n->channel->description, DESCRIPTIONLEN, P);
                             lvprintf(4,"#%s-%s changed channel topic to %s\n",n->channel->name,n->nick,n->channel->description);
                             nsock=n->channel->net;
                             while (nsock!=NULL)
@@ -3457,4 +3457,4 @@ int main(int argc, char *argv[])
           
         
       }
-  }
+  }

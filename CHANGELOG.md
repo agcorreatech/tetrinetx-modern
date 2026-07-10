@@ -197,6 +197,33 @@ Maintainer / Developer: Alexandro G. Corrêa <alex.linux@gmail.com>
   above, plus `/topic`/`/list`/`/join`/`/msg`/`/move`/`/set`, starting a
   game and winning, and the single-player endgame fix).
 
+### Eliminated remaining `-Wstringop-truncation`/`-Wformat-truncation` warnings
+
+- Five bounded-copy call sites (two new admin-password copies in
+  `securityread()`, three new/changed ban-field copies in
+  `readbanlist()`, plus one pre-existing one in `net_connected()`'s
+  channel-description handling, unrelated to this release but visible
+  in the same build output) triggered GCC's truncation warnings --
+  first as `-Wstringop-truncation` on the original `strncpy()` +
+  manual-null-terminator pattern, then as `-Wformat-truncation` after
+  switching those specific sites to `snprintf()`. Both warnings are
+  GCC's static heuristic failing to prove an intentional, safe
+  truncation is actually safe -- not a real bug in either case (the
+  destination sizes were always correct), but noisy in CI/Docker build
+  logs.
+- Added `safe_strcpy(dest, destsize, src)` (`src/utils.c`/`src/utils.h`):
+  computes the copy length at runtime (`strlen()` + a comparison) and
+  uses `memcpy()`, rather than a literal `strncpy()`/`snprintf()` call
+  GCC can statically analyze against the source's declared buffer size.
+  This is the standard way to silence both of these particular GCC
+  checks without a blanket `-Wno-...` flag or per-line pragmas, since
+  neither warning is deep enough to trace a runtime-computed length
+  back to a proven-safe bound. Used at all five sites above.
+- Verified: full clean compile, zero warnings. Re-ran
+  `contrib/tests/config-migration/run.sh` (which exercises the admin
+  password and ban admin/reason/target fields this touches) --
+  all assertions still pass.
+
 ### Docker build fix: missing libc headers (`signal.h` and friends)
 
 - `contrib/docker/Dockerfile`'s build stage installed only the `gcc`
