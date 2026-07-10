@@ -197,6 +197,18 @@ Maintainer / Developer: Alexandro G. Corrêa <alex.linux@gmail.com>
   above, plus `/topic`/`/list`/`/join`/`/msg`/`/move`/`/set`, starting a
   game and winning, and the single-player endgame fix).
 
+### Docker build fix: missing libc headers (`signal.h` and friends)
+
+- `contrib/docker/Dockerfile`'s build stage installed only the `gcc`
+  package (with `--no-install-recommends`), which on Ubuntu only
+  *recommends* `libc6-dev` rather than depending on it -- so the C
+  library headers (`signal.h`, etc, all of `src/main.h`'s includes)
+  were missing, and the build failed with `fatal error: signal.h: No
+  such file or directory`. Switched to installing `build-essential`
+  instead, which properly `Depends:` on `libc6-dev` (confirmed via
+  `apt-cache depends` on both packages) alongside `gcc`, `g++`, `make`,
+  and `dpkg-dev`.
+
 ### `docker/` and `tests/` moved into `contrib/`
 
 - Both folders moved to `contrib/docker/` and `contrib/tests/`
