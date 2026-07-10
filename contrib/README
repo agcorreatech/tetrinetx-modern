@@ -29,3 +29,16 @@ Programs
 	contrib/systemd/README.md for details.
 
 
+Historical Reference
+---------------------
+
+* contrib/OLD.HISTORY, contrib/OLD.WISHLIST 	(moved here - 2026)
+	These are the original build-by-build changelog (1998-1999) and
+	the original feature wishlist from the very first tetrinetx author.
+	They are kept here purely as historical reference (e.g. to see when
+	and why a given behaviour was first introduced, or what was once
+	requested but never built). They are NOT maintained anymore and do
+	NOT reflect the current state of the project -- see CHANGELOG.md in
+	the repository root for the current, maintained changelog.
+
+

@@ -1,82 +1,159 @@
 # Changelog
 
-## Unreleased
+Maintainer / Developer: Alexandro G. Corrêa <alex.linux@gmail.com>
 
-- **Fix:** partida não finalizava quando havia apenas 1 jogador na sala e
-  este perdia. A verificação de fim de jogo em `playerlost` (`src/main.c`)
-  exigia um oponente restante (`ns1 != NULL`) para disparar o encerramento;
-  em uma partida solo isso nunca acontecia, deixando o canal preso em
-  `STATE_INGAME` para sempre. Agora, quando não há nenhum outro jogador
-  restante, o servidor encerra a partida normalmente e envia
-  `pline 0 "-=== Game Over - no winner ===-"` para o jogador.
-- **Fix:** a winlist (placar) não era enviada para todos os jogadores do
-  canal ao final de uma partida. A função `sendwinlist()` (`src/game.c`)
-  usava um `do...while` cuja condição de repetição (`n != NULL`) parava o
-  laço logo na primeira iteração no modo "enviar para todos"
-  (`sendwinlist(chan, NULL)`), fazendo com que só o primeiro jogador da
-  lista interna recebesse a winlist atualizada. Corrigido para
-  `n == NULL`, permitindo que o laço percorra toda a lista de jogadores
-  quando o destino é "todos".
-- **Added:** suporte para compilar e rodar o servidor com **Docker /
-  Docker Desktop** (`docker/`), incluindo:
-  - `Dockerfile`: build multi-stage (compila com `gcc` em uma etapa,
-    imagem final enxuta rodando com usuário sem privilégios).
-  - `entrypoint.sh`: lida com o fato de o binário fazer seu próprio
-    "double-fork" ao daemonizar (incompatível com o modelo padrão de
-    container), mantendo o container em primeiro plano enquanto o
-    processo real do servidor estiver vivo, e repassando
-    `SIGTERM`/`SIGINT` corretamente.
-  - `docker-compose.yml`: forma recomendada de uso no Docker Desktop,
-    já com portas, volume persistente (`/data`) e `init: true`
-    configurados.
-  - `README.md`: instruções de uso completas, incluindo a explicação
-    do porquê de precisar de `--init`/`init: true` (evitar zumbis
-    gerados pelo double-fork do binário em containers sem um init de
-    verdade como PID 1).
-  - `.dockerignore` (raiz do repo): contexto de build enxuto, sem
-    `.git`, binário pré-compilado, cliente Windows, etc.
-- **Changed:** `README` principal agora também aponta para
-  `docker/README.md`.
-- **Added:** suporte a gerenciar o servidor como serviço `systemd` no
-  Linux (`contrib/systemd/`), incluindo:
-  - `tetrinetx.service`: unit file (`Type=forking`, já que o binário faz
-    seu próprio double-fork/daemonize).
-  - `install-tetrinetx-service.sh`: script que compila o servidor (se
-    necessário), cria um usuário de sistema dedicado, instala os
-    arquivos em `/opt/tetrinetx` e registra o serviço.
-  - `README.md`: instruções de uso (`systemctl start|stop|restart|status
-    tetrinetx`).
-- **Security (reviewed):** CVE-1999-1060 (buffer overflow via long DNS
-  hostname on connect, port 31457) revisada linha a linha. O vetor
-  remoto real (`hostnamefromip()` em `src/net.c`, que resolve o
-  hostname de quem conecta via `gethostbyaddr()`) já estava corrigido
-  desde a Release 03, com `strncpy`/terminação nula corretas — não foi
-  necessária nenhuma mudança de código para o CVE em si.
-- **Hardening (relacionado, não é o CVE):** `getmyhostname()`
-  (`src/net.c`), usada apenas para resolver o hostname do **próprio
-  servidor** na inicialização (não é acionável remotamente por um
-  jogador), ainda fazia `strcpy()` sem limite a partir da variável de
-  ambiente `HOSTNAME` e do self-lookup de DNS. Mesmo não sendo o vetor
-  do CVE-1999-1060, é a mesma classe de bug escrevendo no mesmo campo
-  `n->host`; a função agora recebe o tamanho do buffer e usa
-  `strncpy`/terminação nula em todas as cópias.
-- **Fix:** consequência do ponto acima — a mesma função também
-  recusava iniciar o servidor (`fatal()` → `exit(1)`) sempre que não
-  conseguia determinar um hostname totalmente qualificado (FQDN) da
-  própria máquina, mostrando `"Can't determine your hostname!"` e
-  encerrando. Isso é comum em containers, sandboxes e setups mínimos
-  sem DNS/domínio configurado. Agora ela usa o melhor hostname que
-  conseguiu resolver (ou `"localhost"` como último recurso), registra
-  um aviso (stdout + log) e o servidor continua subindo normalmente.
+## Release 04 - 09/Jul/2026
 
-- **Removed:** `TODO` / `TODO.md` — todos os itens que estavam listados
-  (bug do fim de jogo com 1 jogador, bug da winlist e o suporte a
-  systemd) já foram implementados; o histórico do Git preserva o
-  conteúdo antigo, caso seja necessário consultar.
-- **Fixed (docs):** `README` apontava para um arquivo `CHANGELOG` que
-  não existe mais (agora é `CHANGELOG.md`); corrigidos também pequenos
-  erros de digitação ("implementetion", "beign", "Pronpt", "wls") e
-  adicionada uma seção apontando para `contrib/systemd/README.md`.
+### Admin authentication (multi-admin, nickname + password)
+
+- `game.secure` moved from a single, shared `op_password` to a proper
+  multi-admin format: one `[nickname]` block per admin, each with its own
+  `password=` line (mirrors the same `[SECTION]` block style already used
+  for preset channels in `game.conf`).
+- `/op <password>` and `/admin <password>` (new alias, identical
+  behaviour) now use the **already-connected player's own nickname** as
+  the implicit username: the entered password is checked against the
+  admin account whose `[nickname]` matches `n->nick`. Since nicknames are
+  already unique server-wide and can't be changed mid-session, this adds
+  a real extra layer of protection (both the correct nickname AND the
+  correct password are required), not just a cosmetic change -- with no
+  change to the command's calling syntax.
+- Backward compatible: a `game.secure` still using the old, bare
+  `op_password=X` line (outside any block) is migrated automatically on
+  first read into an admin account named `admin`, logged clearly, and the
+  file is rewritten in the new format.
+- New: `check_admin_login()`, `find_or_add_admin_slot()` (`src/game.c`).
+
+### Ban system: `/ban`, `/unban`, `/banlist`
+
+- `/ban <playernumber> [reason]` now bans **both** the target's IP and
+  nickname (two separate entries), so switching networks/VPNs doesn't let
+  a banned player back in under the same nickname. The banned player is
+  immediately disconnected (unlike `/kick`, see below).
+- `/unban ip <ip>` / `/unban nick <nickname>` removes the matching entry
+  explicitly by type, so undoing an IP ban never accidentally lifts the
+  matching nickname ban (or vice versa).
+- `/banlist` (admin-only, `command_banlist`) lists every active ban: type,
+  target, date/time applied, admin responsible, and reason.
+- `game.ban` moved from a flat list of wildcarded IPs to the same
+  `[BAN]`-block format as `game.secure`'s admin blocks (`type`, `target`,
+  `date`, `admin`, `reason`), loaded into memory once (`banlist[]`)
+  instead of being re-parsed from disk on every single connection
+  attempt. Backward compatible: any legacy bare wildcarded-IP lines
+  outside a `[BAN]` block are migrated automatically into the new format
+  on first read.
+- IP bans are checked immediately after `accept()` in `net_telnet()`
+  (earliest possible rejection); nickname bans are checked in
+  `net_connected()`, right after the client's `tetrisstart` INIT string is
+  parsed (the earliest point the server can know which nickname is being
+  requested).
+- New: `is_ip_banned()`, `is_nick_banned()`, `add_ban()`, `remove_ban()`,
+  `readbanlist()`, `writebanlist()`, `init_banlist()`,
+  `ip_matches_pattern()` (`src/game.c`).
+- New `game.conf` tag: `command_ban` (default: 3, authenticated admins
+  only) and `command_banlist` (default: 3).
+
+### `/whois <nickname>`
+
+- New command showing detailed information about one specific player
+  (searched across all channels, same scope `/who` already uses): team,
+  channel, gameslot, status (playing/lost/not playing), current level
+  (while playing), TetriNET client version, and host/IP (admin-only,
+  same visibility rule `/who` already applies).
+- New `game.conf` tag: `command_whois` (default: 1, anyone).
+
+### `/kick` no longer disconnects -- redirects to the server lobby
+
+- **Behaviour change:** a kicked player is no longer disconnected.
+  Instead, they're moved to the server's "lobby" room
+  (`game.main_channel_name`, default `Lobby`), using `Lobby1`, `Lobby2`,
+  ... automatically if the base room is full **or** if that's the very
+  room being kicked from (no special-casing needed -- the lobby search
+  simply excludes the room being left).
+- The kicked nickname is blocked from rejoining that **specific** room
+  for 5 minutes (`KICK_COOLDOWN_SECS`). The block is keyed by nickname
+  (not by connection), so it survives a disconnect/reconnect during the
+  cooldown window. Checked in `/join`'s channel-resolution step.
+- `/kick` itself stays at its original permission level (chanop / "OP by
+  position", `command_kick=2`) -- unlike the admin-only commands below,
+  this one is left as a lightweight, position-based moderation tool for
+  running the game smoothly.
+- New: `create_channel()`, `find_or_create_lobby_channel()`,
+  `move_player_to_channel()`, `add_kick_cooldown()`,
+  `is_kick_cooldown_active()` (`src/main.c`). `move_player_to_channel()`
+  is a new, self-contained function (not a refactor of `/join`'s existing
+  handler, to avoid any risk of regressing that already-working protocol
+  code path) that replays the same playerleave/playerjoin/field-resync
+  sequence `/join` already sends when a player switches channels.
+
+### Extended (victory-only) winlist metrics + plain-text CSV export
+
+- The original in-game winlist is **unchanged**: same `struct winlist_t`,
+  same `game.winlist` binary file, same `/winlist` command, same data
+  shown to the TetriNET client.
+- New, entirely separate tracking (`struct winliststats_t`,
+  `game.winliststats`): total wins, last win date/time, best level reached
+  in a winning game, and average level reached across wins -- recorded
+  alongside every existing `updatewinlist()` call, never instead of it.
+  Deliberately victory-only for now (a true "games played" count,
+  including losses, would need a new recording point at the moment a
+  player loses, not just when a winner is declared -- left out of scope).
+- Bugfix needed to make "level reached" meaningful: the `lvl` protocol
+  command was only ever relaying the level number to other players,
+  never actually storing it -- `n->level` stayed permanently at its
+  initial value. Now stored on receipt.
+- `writewinlist()` now also calls `writewinlisttxt()` automatically,
+  which exports the winlist (+ extended metrics where available) to a
+  plain-text **CSV** file (`game.winlist.csv`): `rank,type,name,score,
+  wins,last_win,best_level,avg_level`. Gated by the new `game.conf` tag
+  `winlist_export_txt` (default: 1). Names are stripped of TetriNET
+  colour-code control characters first (`strip_colour_codes()`, extracted
+  from logic `sendwinlist()` already used, and reused by both).
+- New: `init_winliststats()`, `readwinliststats()`, `writewinliststats()`,
+  `updatewinliststats()`, `find_winliststats()`, `writewinlisttxt()`,
+  `strip_colour_codes()` (`src/game.c`).
+
+### `/help` rewritten: shows only what you can currently use
+
+- Replaced ~20 near-identical, repetitive command blocks with a single
+  data-driven table (`help_table[]`) and one loop.
+- **Behaviour change:** `/help` now shows only the commands the
+  requesting player can actually use *right now*, based on their current
+  permission level -- rather than listing every enabled command for
+  everyone with a "requires OP/`/op`" marker regardless of whether the
+  viewer qualifies.
+- Admin-only commands (`/ban`, `/unban`, `/banlist`, and the five
+  reclassified commands below) are grouped under a separate
+  `--- Admin Commands ---` header, which itself is only ever shown once
+  at least one such command currently qualifies -- so a non-admin never
+  sees an empty admin section.
+- `/set` needed a dedicated `can_use_set()` check: it has a bonus
+  permission rule on top of the normal level check (`command_set==4`
+  additionally allows chanops on non-persistent channels), and a naive
+  `passed_level(n, game.command_set)` would have hidden `/set` from
+  *everyone*, since level 4 is not a normally-reachable security level.
+
+### Command permission changes
+
+- `/priority`, `/persistant`, `/save`, `/reset`, `/clear` are now
+  authenticated-admin-only by default (`command_priority` raised from 2
+  to 3; the other four were already 3). `/kick` intentionally stays at
+  its original chanop-level default (2) -- see above.
+- **Operational note:** default changes only affect fresh installs (no
+  existing `game.conf`, or the specific tag missing from one). Existing
+  deployments with `command_priority=2` (or similar) already written to
+  their `game.conf` keep that value until edited manually.
+
+### Documentation
+
+- `OLD.HISTORY` and `OLD.WISHLIST` moved to `contrib/` (`git mv`, history
+  preserved) -- kept purely as historical reference (the original
+  1998-1999 build-by-build changelog and feature wishlist from the first
+  tetrinetx author), no longer reflecting the current state of the
+  project. Documented in `contrib/README`.
+- This changelog is now written in English going forward, uses
+  `Release NN - DD/Mon/YYYY` headings (matching Releases 01-03 below)
+  instead of `Unreleased`, and credits the current maintainer.
 
 _________________________________________________________________________________
 
