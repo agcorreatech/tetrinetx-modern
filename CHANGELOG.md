@@ -4,6 +4,23 @@ Maintainer / Developer: Alexandro G. Corrêa <alex.linux@gmail.com>
 
 ## Release 05 - 11/Jul/2026
 
+### Fix: pause/unpause locked up the game after one cycle
+
+- The `pause` partyline handler (`src/main.c`, `net_connected()`) had its
+  channel-status transition inverted and gated the command on
+  `STATE_INGAME` only. Pausing (`pause 1`) left the channel `INGAME`
+  while unpausing (`pause 0`) set it to `STATE_PAUSED`, so a game could
+  be paused and unpaused exactly once; after that the channel was stuck
+  in `STATE_PAUSED` while actually running, and every subsequent
+  pause/unpause **and** "stop game" -- all gated on the channel status --
+  was silently ignored until the game ended on its own. (It also left the
+  sudden-death timer ticking during a pause, since the channel was still
+  `INGAME`.) Now `pause 1` is accepted only while `INGAME` and sets
+  `PAUSED`; `pause 0` is accepted only while `PAUSED` and sets `INGAME`.
+- Relatedly, "stop game" (`startgame 0`) is now accepted while the
+  channel is `STATE_PAUSED` too, so an op can stop a paused game directly
+  instead of having to unpause it first.
+
 ### Code-review round: crashes, memory safety and small logic fixes
 
 A pass over `src/` fixing a set of latent defects found by review. Each

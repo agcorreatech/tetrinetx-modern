@@ -2330,7 +2330,21 @@ void net_connected(struct net_t *n, char *buf)
       {
         valid_param=2;
         s = sscanf(PARAM, "%d %d", &num, &num2);
-        if ( (s >= 2) && is_op(n) && (n->channel->status == STATE_INGAME) && (num2==n->gameslot) && ( (num==0)||(num==1)) )
+        /* BUGFIX: pause used to (a) gate on STATE_INGAME only and (b) assign
+           the resulting status inverted -- pausing (num==1) left the channel
+           INGAME while unpausing (num==0) set it to PAUSED. Net effect: a
+           game could be paused and unpaused exactly once, after which the
+           channel was stuck in STATE_PAUSED while actually running, so every
+           further pause/unpause AND "stop game" (all gated on the channel's
+           status) were silently ignored until the game ended on its own.
+           It also left the sudden-death timer ticking during a pause.
+           Correct semantics (num==1=pause, num==0=unpause, matching the
+           "pause 1" the join code sends into a paused channel): accept
+           num==1 only while INGAME and set PAUSED; accept num==0 only while
+           PAUSED and set INGAME. */
+        if ( (s >= 2) && is_op(n) && (num2==n->gameslot)
+             && ( ((num==1) && (n->channel->status == STATE_INGAME))
+               || ((num==0) && (n->channel->status == STATE_PAUSED)) ) )
           {
             if (num==1)
               lvprintf(4,"#%s-%s pauses game\n",n->channel->name,n->nick);
@@ -2346,7 +2360,7 @@ void net_connected(struct net_t *n, char *buf)
                   tprintf(nsock->sock,"pause %d\xff", num);
                 nsock=nsock->next;
               }
-            if (num==0)
+            if (num==1)
               n->channel->status=STATE_PAUSED;
             else
               n->channel->status=STATE_INGAME;
@@ -2606,7 +2620,10 @@ void net_connected(struct net_t *n, char *buf)
       {
         valid_param=2;
         s = sscanf(PARAM, "%d %d %600[^\n\r]", &num, &num2, MSG);
-        if ( (s >= 2) && is_op(n) && ( ((num==1) && (n->channel->status == STATE_ONLINE)) || ((num==0) && (n->channel->status == STATE_INGAME)) ) && (num2==n->gameslot) && ( (num == 1) || (num == 0)) )
+        /* Stopping (num==0) is now allowed from STATE_PAUSED as well as
+           STATE_INGAME, so an op can stop a paused game directly instead of
+           being forced to unpause it first. */
+        if ( (s >= 2) && is_op(n) && ( ((num==1) && (n->channel->status == STATE_ONLINE)) || ((num==0) && ((n->channel->status == STATE_INGAME) || (n->channel->status == STATE_PAUSED))) ) && (num2==n->gameslot) && ( (num == 1) || (num == 0)) )
           {
             valid_param=1;
             if (num==1)

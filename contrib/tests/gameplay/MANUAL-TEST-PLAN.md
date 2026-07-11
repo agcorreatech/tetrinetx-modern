@@ -237,7 +237,28 @@ As an authenticated admin (section 3):
       (not stuck in `STATE_INGAME` forever) and the partyline shows
       "Game Over - no winner" — this is the single-player endgame fix.
 
-## 10. Winlist: extended metrics + CSV export
+## 10. Pause / unpause / stop game
+
+With 2+ players in a channel and a game started (section 9), as the
+channel's chanop (the player who can start/stop the game):
+
+- [ ] Click **Pause game**. **Expected:** every client shows the paused
+      overlay and pieces stop falling.
+- [ ] Click **Unpause** (continue). **Expected:** every client resumes.
+- [ ] **Pause and unpause again, several times in a row.** **Expected:**
+      it keeps working every time — this is the regression this section
+      exists for. Before the fix, the game could be paused and unpaused
+      exactly once, after which pause, unpause, **and** stop game were all
+      silently ignored until the game ended on its own.
+- [ ] While the game is **paused**, click **Stop game**. **Expected:** the
+      game stops for everyone (the channel returns to the not-in-game
+      state) — stopping is allowed directly from a paused game.
+- [ ] Start a new game, pause it, and confirm sudden death does **not**
+      advance while paused: with a short `sd_timeout` set (via `/set
+      SUDDENDEATH` or `game.conf`), pause before the timeout would fire
+      and confirm no server-added lines arrive until you unpause.
+
+## 11. Winlist: extended metrics + CSV export
 
 After at least one completed game with a winner (section 9):
 
