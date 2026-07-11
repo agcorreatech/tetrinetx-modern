@@ -2226,7 +2226,7 @@ void net_connected(struct net_t *n, char *buf)
                       { /* Passed, this player is OP */
                         n->securitylevel =LEVEL_AUTHOP;
                         n->op_auth_timeout=0; /* restricted-nickname deadline satisfied */
-                        tprintf(n->sock,"pline 0 %cYour security level is now: %cAUTHENTICATED OP\xff", GREEN, RED);
+                        tprintf(n->sock,"pline 0 %cYour security level is now: %cSERVER ADMIN\xff", GREEN, RED);
                         lvprintf(4,"#%s-%s authenticated successfully for op status\n", n->channel->name,n->nick);
                       }
                     else

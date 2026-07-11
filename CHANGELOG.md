@@ -15,6 +15,9 @@ Maintainer / Developer: Alexandro G. Corrêa <alex.linux@gmail.com>
 - New /password command: an authenticated admin can change their own
   admin password from the partyline, persisted to game.secure
   immediately.
+- The /op success message now reads "Your security level is now:
+  SERVER ADMIN" (was "AUTHENTICATED OP"), matching the wording /help
+  uses for the admin role.
 - Restricted nicknames: connecting under a nickname that has an admin
   account requires authenticating with /op within 60 seconds, otherwise
   the player is disconnected — prevents impostors from occupying admin
@@ -85,6 +88,14 @@ Maintainer / Developer: Alexandro G. Corrêa <alex.linux@gmail.com>
   everything that needs a real authenticated game session.
 - New beginner's guides in English and Brazilian Portuguese ("How to
   start and play" / "Como iniciar e jogar") at the repository root.
+- Bundled Windows client (TETRINET.EXE inside the client zip) updated
+  with two clearer messages: "*** <nick> is Now Alone" now reads
+  "*** <nick> has No Team", and "*** Server has Shut Down" — which the
+  client showed on ANY disconnect, even when only that player was
+  dropped — now reads "*** You are Disconnected". These texts are
+  produced by the client itself, not by the server, so they could only
+  be changed inside the client executable (in-place binary text patch;
+  everything else in the client is untouched).
 - Repository organization: docker/, tests/ and the historical
   OLD.HISTORY/OLD.WISHLIST files moved under contrib/; the changelog is
   now written in English with dated release headings.

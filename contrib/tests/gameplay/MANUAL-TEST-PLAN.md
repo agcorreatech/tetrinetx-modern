@@ -79,7 +79,7 @@ Default account first — on a **fresh** server (no `game.secure` yet):
       about the default admin account still being present, recommending
       changing both the account name and the password.
 - [ ] Connect with nickname `admin`, run `/op tetrinetx`. **Expected:**
-      "Your security level is now: AUTHENTICATED OP".
+      "Your security level is now: SERVER ADMIN".
 - [ ] Edit `game.secure` to rename the account/change the password,
       restart, and confirm the startup `WARNING` is gone.
 
@@ -133,7 +133,7 @@ password=bobpass
 values are silently truncated). Restart the server.
 
 - [ ] Connect with nickname `alice`, run `/op alicepass`. **Expected:**
-      "Your security level is now: AUTHENTICATED OP".
+      "Your security level is now: SERVER ADMIN".
 - [ ] Connect with nickname `alice`, run `/op bobpass` (the wrong
       password for this nick). **Expected:** "Invalid Password!".
 - [ ] Connect with nickname `mallory` (not a registered admin at all),
