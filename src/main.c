@@ -1025,7 +1025,13 @@ void net_connected(struct net_t *n, char *buf)
                    and disconnects them for real (unlike /kick, which only
                    redirects to the lobby -- a ban means they can't reconnect
                    at all until /unban'ed). */
-                if ( !strncasecmp(MSG, "/ban", 4) && (game.command_ban>0) )
+                /* Boundary check ("ban"[4] must be end-of-string or a
+                   space): without it, "/banlist" also starts with "/ban"
+                   and would trigger THIS handler too, dumping a spurious
+                   "Usage: /ban <playernumber> [reason]" alongside the
+                   actual banlist output. Same class of bug as /who vs
+                   /whois above. */
+                if ( !strncasecmp(MSG, "/ban", 4) && (MSG[4]=='\0' || MSG[4]==' ') && (game.command_ban>0) )
                   {
                     valid_param=2;
                     if ( passed_level(n,game.command_ban) )
@@ -1166,10 +1172,15 @@ void net_connected(struct net_t *n, char *buf)
                                   {
                                     found_whois=1;
 
+                                    /* Labels are left-padded to a fixed width (instead of a
+                                       single '\t' after each, which lands at wildly different
+                                       columns depending on the label's own length) so every
+                                       value lines up in the same column regardless of label
+                                       length -- "Client version:" is the longest at 16 chars. */
                                     tprintf(n->sock,"pline 0 %cWhois: %s\xff", NAVY, nsock->nick);
-                                    tprintf(n->sock,"pline 0   %cTeam:\t%s\xff", BLACK, nsock->team);
-                                    tprintf(n->sock,"pline 0   %cChannel:\t#%s\xff", BLACK, nsock->channel->name);
-                                    tprintf(n->sock,"pline 0   %cSlot:\t%d\xff", BLACK, nsock->gameslot);
+                                    tprintf(n->sock,"pline 0   %c%-17s%s\xff", BLACK, "Team:", nsock->team);
+                                    tprintf(n->sock,"pline 0   %c%-17s#%s\xff", BLACK, "Channel:", nsock->channel->name);
+                                    tprintf(n->sock,"pline 0   %c%-17s%d\xff", BLACK, "Slot:", nsock->gameslot);
 
                                     switch (nsock->status)
                                       {
@@ -1177,15 +1188,15 @@ void net_connected(struct net_t *n, char *buf)
                                         case STAT_LOST:     statusdesc="Lost (waiting for game to end)"; break;
                                         default:            statusdesc="Not playing"; break;
                                       }
-                                    tprintf(n->sock,"pline 0   %cStatus:\t%s\xff", BLACK, statusdesc);
+                                    tprintf(n->sock,"pline 0   %c%-17s%s\xff", BLACK, "Status:", statusdesc);
 
                                     if (nsock->status==STAT_PLAYING)
-                                      tprintf(n->sock,"pline 0   %cLevel:\t%d\xff", BLACK, nsock->level);
+                                      tprintf(n->sock,"pline 0   %c%-17s%d\xff", BLACK, "Level:", nsock->level);
 
-                                    tprintf(n->sock,"pline 0   %cClient version:\t%s\xff", BLACK, nsock->version);
+                                    tprintf(n->sock,"pline 0   %c%-17s%s\xff", BLACK, "Client version:", nsock->version);
 
                                     if (passed_level(n,LEVEL_AUTHOP))
-                                      tprintf(n->sock,"pline 0   %cHost/IP:\t%s\xff", BLACK, nsock->host);
+                                      tprintf(n->sock,"pline 0   %c%-17s%s\xff", BLACK, "Host/IP:", nsock->host);
                                   }
                                 nsock=nsock->next;
                               }
@@ -1490,7 +1501,11 @@ void net_connected(struct net_t *n, char *buf)
                   }
                   
                 /* Who is online */
-                if ( !strncasecmp(MSG, "/who", 4) && (game.command_who>0))
+                /* Boundary check ("who"[4] must be end-of-string or a
+                   space): without it, "/whois <nick>" also starts with
+                   "/who" and would trigger THIS handler too, dumping an
+                   unwanted full player list right after the whois info. */
+                if ( !strncasecmp(MSG, "/who", 4) && (MSG[4]=='\0' || MSG[4]==' ') && (game.command_who>0))
                   {
                     valid_param=2;
                     if ( passed_level(n,game.command_who) )
