@@ -2756,32 +2756,40 @@ void read_motd(struct net_t *n)
   char motd[1024];
 
   file_in = fopen(FILE_MOTD,"r");
- 
+
   /* File exists, so read it */
   if (file_in != NULL)
   {
-    while (!feof(file_in))
+    /* BUGFIX: this used to loop on "!feof(file_in)", which only becomes
+       true AFTER a read attempt has already run past the last line -- so
+       every call did one extra, guaranteed-to-fail fscanf() beyond the
+       real content, and that ordinary end-of-file was (wrongly) treated
+       as a fatal I/O error. fatal() kills every connected socket and
+       exit()s the WHOLE server process, so this crashed the entire
+       server on every single client connection (any connection that got
+       far enough to be sent the MOTD), not just the one being served.
+       Looping on the fscanf() result itself avoids the spurious extra
+       iteration entirely. */
+    while (fscanf(file_in,"%1023[^\n]\n", motd) == 1)
     {
-      
-      if(fscanf(file_in,"%1023[^\n]\n", motd) != 1)
-      {
-        lvprintf(4,"ERROR: Failed to read MOTD file. Check folder permissions or remove the file.\n");
-        fatal("Failed to read MOTD file. Check folder permissions or remove the file.",0);
-      }
-      else {
-        tprintf(n->sock,"pline 0 %c%c%s\xff", BOLD, BLUE, motd);
-      }
+      /* Strip a trailing '\r' (game.motd saved/edited with CRLF line
+         endings): "%[^\n]" stops at '\n' but includes a preceding '\r'
+         as an ordinary character, which would otherwise be sent
+         verbatim, embedded in the "pline" packet right before its
+         terminating '\xff'. */
+      int mlen = strlen(motd);
+      if (mlen>0 && motd[mlen-1]=='\r') motd[mlen-1]='\0';
+      tprintf(n->sock,"pline 0 %c%c%s\xff", BOLD, BLUE, motd);
     }
-  
+
     lvprintf(4,"File game.motd read successfully.\n");
+    fclose(file_in);
   }
   else
   {
     lvprintf(4,"ERROR: Failed to read MOTD file. Check folder permissions or remove the file.\n");
     fatal("Failed to read MOTD file. Check folder permissions or remove the file.",0);
   }
-
-  fclose(file_in);
 }
 
 /* Write a new the MOTD file with defaults */
