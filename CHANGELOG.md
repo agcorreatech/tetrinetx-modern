@@ -4,6 +4,90 @@ Maintainer / Developer: Alexandro G. Corrêa <alex.linux@gmail.com>
 
 ## Release 05 - 11/Jul/2026
 
+### Fix: pause/unpause locked up the game after one cycle
+
+- The `pause` partyline handler (`src/main.c`, `net_connected()`) had its
+  channel-status transition inverted and gated the command on
+  `STATE_INGAME` only. Pausing (`pause 1`) left the channel `INGAME`
+  while unpausing (`pause 0`) set it to `STATE_PAUSED`, so a game could
+  be paused and unpaused exactly once; after that the channel was stuck
+  in `STATE_PAUSED` while actually running, and every subsequent
+  pause/unpause **and** "stop game" -- all gated on the channel status --
+  was silently ignored until the game ended on its own. (It also left the
+  sudden-death timer ticking during a pause, since the channel was still
+  `INGAME`.) Now `pause 1` is accepted only while `INGAME` and sets
+  `PAUSED`; `pause 0` is accepted only while `PAUSED` and sets `INGAME`.
+- Relatedly, "stop game" (`startgame 0`) is now accepted while the
+  channel is `STATE_PAUSED` too, so an op can stop a paused game directly
+  instead of having to unpause it first.
+
+### Code-review round: crashes, memory safety and small logic fixes
+
+A pass over `src/` fixing a set of latent defects found by review. Each
+was validated by a clean `-Wall` build plus the two scriptable test
+suites (`config-migration`, `query-port`) and a full Docker run.
+
+Memory-safety / crashes:
+
+- **Use-after-free in `net_telnet_init()`** (`src/main.c`): the "too few
+  conversions" bail-out (a malformed `tetrisstart` INIT string) was
+  missing its `return`, so after `lostnet()` had already `free()`d the
+  connection it fell through into every check below (`"server"` nickname,
+  nick ban, version, duplicate nick, ...), dereferencing freed memory.
+  Now returns immediately, like every other bail-out in that function.
+- **Memory leak in `net_telnet_init()`** (`src/main.c`): `dec`, allocated
+  by `tet_dec2str()`, was never freed on any path -- one small leak per
+  connection. Freed once the nickname/version are parsed out of it.
+- **Buffer overflow in `lvprintf()` / `lprintf()`** (`src/main.c`) and
+  `tprintf()` (`src/net.c`): all three formatted with unbounded
+  `vsprintf()` into a fixed static buffer. `lvprintf()` in particular
+  logs client-controlled data (e.g. the "Invalid Command" log echoes the
+  raw ~1KB line into a 768-byte buffer), overflowing it *before* the
+  post-hoc length truncation could run. Switched to `vsnprintf()`.
+- **Use-after-free in `got_term()`** (`src/main.c`): the SIGTERM handler
+  called `lostnet()` (which frees the node, and possibly the whole
+  channel) and then walked `->next` on the freed pointers. On shutdown
+  there's nothing to gain from `lostnet()`'s bookkeeping, so it now just
+  closes each socket, capturing the `next` pointers first.
+- **Out-of-bounds access in `gameread()`** (`src/game.c`): the trailing-
+  space strip lacked the `j>=0` guard its sibling readers
+  (`securityread()`, `readbanlist()`) already had, so a line that became
+  empty after comment/CR stripping read/wrote `buf[-1]`. Guard added.
+
+Logic / correctness:
+
+- **`strclen()` returned the wrong value** (`src/main.c`): documented as
+  "length minus colour codes", it accumulated that into `count` but
+  returned `i` (the full length). `/who` uses it to pad nick/team columns
+  to a fixed *visible* width, so any name carrying colour codes was
+  mis-aligned. Now returns `count`.
+- **`/motd` checked the wrong permission flag** (`src/main.c`): it was
+  gated by `game.command_list` (copy/paste from `/list`) instead of its
+  own `game.command_motd`, which was being ignored entirely.
+- **`/winlist` printed `unsigned long` scores with `%4d`**
+  (`src/main.c`): a type/format mismatch (varargs UB); changed to `%4lu`
+  to match the value's actual type.
+- **Unresolved-host fallback logged the server's own IP** (`src/main.c`,
+  `net_telnet()`): the dotted-quad was built from `n->addr` (the
+  listening socket) instead of `net->addr` (the connecting client).
+- **`pause`-unpause log format typo** (`src/main.c`): `"#%2-%s"` ->
+  `"#%s-%s"`.
+
+Robustness:
+
+- **`read_motd()` no longer takes the whole server down** (`src/main.c`):
+  a missing/unreadable `game.motd` (cosmetic, optional) used to call
+  `fatal()`, killing every connection and exiting the process. Now it
+  logs a warning and skips the MOTD for that client.
+- **`while(!feof())` read loops stop on a failed read** (`src/game.c`,
+  `gameread()` / `securityread()` / `readbanlist()`): a failed `fscanf`
+  used to leave the previous line in `buf` and re-process it (a stray
+  trailing `[BAN]` could even allocate a spurious empty ban). They now
+  `break`, which also drops a spurious startup error print.
+- **`/whois` and `/priority` argument guards** (`src/main.c`): with no
+  argument, `MSG+7` / `MSG+10` pointed one byte past the terminator.
+  Guarded so a missing argument reads an empty string instead.
+
 ### Repo housekeeping
 
 - `CLAUDE.md` (guidance for Claude Code sessions working in this repo)
@@ -75,6 +159,14 @@ Maintainer / Developer: Alexandro G. Corrêa <alex.linux@gmail.com>
   the real TetriNET 1.13 client renders accented characters (e.g.
   "Corrêa") correctly in that encoding but mangles UTF-8's multi-byte
   sequences.
+
+### Build: committed binary updated
+
+- `bin/tetrix-modern.linux` rebuilt from the current source so the
+  committed binary includes the pause/unpause fix and the code-review
+  round above (it had been rebuilt during that session but the updated
+  binary was left out of those commits). Verified byte-identical to a
+  clean build of the same source via the Docker `build` stage.
 
 ## Release 04 - 09/Jul/2026
 
