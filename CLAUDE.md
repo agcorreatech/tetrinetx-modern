@@ -2,6 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Git workflow
+
+Always work on a branch named `claude` (branched from `develop`), never
+commit directly to `develop` or `main`. If `claude` doesn't exist yet,
+create it from `develop`. Check out/create it at the start of a session
+before making changes.
+
 ## What this is
 
 TetriNET X Modern is a modernized fork of `tetrinetx` (the classic GNU
