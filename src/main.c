@@ -137,13 +137,16 @@ void writepid(void)
     file_out = fopen(game.pidfile,"w");
     if (file_out == NULL)
       {
-        lvprintf(0,"ERROR: Could not write to PID file %s\n", game.pidfile);
+        lvprintf(0,"BOOT: ERROR: Could not write to PID file %s (%s)\n", game.pidfile, strerror(errno));
       }
     else
       {
         fprintf(file_out,"%d", getpid());
         fclose(file_out);
-        lvprintf(9,"Wrote PID to file %s\n", game.pidfile);
+        /* Priority 1 (was 9) so this always makes the log at default
+           verbosity: it's the "daemon is alive" milestone the pre-fork
+           BOOT messages tell the user to look for. */
+        lvprintf(1,"BOOT: Daemon running (pid %d). Wrote PID to file %s. Startup complete.\n", getpid(), game.pidfile);
       }
   }
 
@@ -677,6 +680,92 @@ void lprintf(char *format,...)
   va_end(va);
 }
 
+/* --------------------------------------------------------------------- */
+/* Startup (boot) debug logging.                                          */
+/*                                                                        */
+/* Everything below runs BEFORE the server daemonizes (before the fork    */
+/* that closes stdin/stdout/stderr), so messages are printed to BOTH      */
+/* stdout (visible when starting from a terminal, or captured by systemd  */
+/* / docker logs) AND the game.log file. This dual output matters         */
+/* because the two most common startup-failure scenarios blind exactly    */
+/* one of the two channels each:                                          */
+/*   - a non-writable working directory silently disables game.log        */
+/*     entirely (lprintf() ignores fopen() failures), so stdout is the    */
+/*     only place the error can appear;                                   */
+/*   - a service manager starting the binary detached from a terminal     */
+/*     hides stdout, so game.log is the only place the error can appear.  */
+/* --------------------------------------------------------------------- */
+
+static int boot_log_broken = 0;   /* set once we detect game.log isn't writable */
+
+/* boot_debug(fmt, ...) - Logs one startup step to stdout + game.log,
+   prefixed with "BOOT:" so startup lines are easy to grep. */
+void boot_debug(char *format,...)
+  {
+    va_list va; static char SBUF3[768];
+    FILE *probe;
+
+    va_start(va,format);
+    vsnprintf(SBUF3,sizeof(SBUF3),format,va);
+    va_end(va);
+
+    printf("BOOT: %s\n", SBUF3);
+    fflush(stdout);
+
+    /* lprintf() silently does nothing when game.log can't be opened for
+       append -- detect that once and say so loudly on stdout, otherwise
+       the user is left staring at an empty/missing log wondering why. */
+    if (!boot_log_broken)
+      {
+        probe = fopen(FILE_LOG,"a");
+        if (probe == NULL)
+          {
+            boot_log_broken = 1;
+            printf("BOOT: WARNING: cannot open %s for writing (%s) -- startup messages will appear on stdout ONLY. Check current directory and permissions: the server reads/writes ALL its files (game.conf, game.log, game.pid, ...) relative to the directory it is started FROM.\n",
+                   FILE_LOG, strerror(errno));
+            fflush(stdout);
+          }
+        else
+          fclose(probe);
+      }
+
+    if (!boot_log_broken)
+      lprintf("BOOT: %s\n", SBUF3);
+  }
+
+/* boot_check_environment() - Early, explicit checks for the most common
+   startup-failure causes, each with a clear message saying exactly what
+   is wrong and how to fix it -- instead of a generic failure later on. */
+void boot_check_environment(void)
+  {
+    FILE *probe;
+    char cwd[512];
+
+    if (getcwd(cwd, sizeof(cwd)) != NULL)
+      boot_debug("Working directory: %s (all game.* files are read/written here)", cwd);
+    else
+      boot_debug("Working directory: (could not determine: %s)", strerror(errno));
+
+    /* Can we write here at all? This single check predicts failures in
+       gamewrite(), writepid(), write_motd(), securitywrite(), the log
+       itself, the winlist, and the CSV export -- all in one message. */
+    probe = fopen(".tetrinetx.write-test","w");
+    if (probe == NULL)
+      {
+        printf("BOOT: FATAL: current directory is not writable (%s).\n", strerror(errno));
+        printf("BOOT: The server creates/updates its files (game.conf, game.log, game.pid,\n");
+        printf("BOOT: game.secure, game.winlist, ...) in the directory it is started FROM.\n");
+        printf("BOOT: Fix: cd to a directory the server's user can write to (e.g. the bin/\n");
+        printf("BOOT: folder you installed to), or fix its permissions, then start again.\n");
+        fflush(stdout);
+        exit(1);
+      }
+    fclose(probe);
+    remove(".tetrinetx.write-test");
+    boot_debug("Working directory is writable: OK");
+  }
+
+
 /* Open a Listening Socket on the TetriNET port */
 void init_telnet_port()
 {
@@ -713,8 +802,13 @@ void init_telnet_port()
     lvprintf(3,"Listening at telnet port %d, on socket %d, bound to %s\n", j,i,game.bindip);
     return;
   }
-  printf("Couldn't find telnet port %d. (is the server already running?)\n",j);
-  lvprintf(0,"Couldn't find telnet port %d.\n", j);
+  printf("BOOT: FATAL: could not bind/listen on game port %d (bind address: %s).\n", j, game.bindip);
+  printf("BOOT: Most common causes:\n");
+  printf("BOOT:   - the server is ALREADY running (check: pgrep -af tetrix / cat game.pid)\n");
+  printf("BOOT:   - another process is using port %d (check: ss -tlnp | grep %d)\n", j, j);
+  printf("BOOT:   - bindip in game.conf points to an IP this machine doesn't have (current: %s)\n", game.bindip);
+  fflush(stdout);
+  lvprintf(0,"BOOT: FATAL: could not bind/listen on game port %d (bindip: %s). Already running, port in use, or bad bindip in game.conf.\n", j, game.bindip);
   exit(1);
 }
 
@@ -1378,7 +1472,7 @@ void net_connected(struct net_t *n, char *buf)
                         P=MSG+7;
                         if (strlen(MSG)>=7)
                           {
-                            strncpy(n->channel->description, P, DESCRIPTIONLEN-1); n->channel->description[DESCRIPTIONLEN-1]=0;
+                            safe_strcpy(n->channel->description, DESCRIPTIONLEN, P);
                             lvprintf(4,"#%s-%s changed channel topic to %s\n",n->channel->name,n->nick,n->channel->description);
                             nsock=n->channel->net;
                             while (nsock!=NULL)
@@ -3383,30 +3477,55 @@ int main(int argc, char *argv[])
     
     printf("\nTetrinet X Modern - New GNU TetriNET Server\n");
     printf("More info: https://github.com/agcorreatech/tetrinetx-modern\n\n");
-        
+
+    /* Startup debug: each step below is logged (stdout + game.log) BEFORE
+       it runs, so if the process dies mid-startup, the last "BOOT:" line
+       printed tells you exactly which step failed. All of this happens
+       before the daemonizing fork(), so stdout is still attached. */
+    boot_debug("Starting Tetrinet X Modern v%s.%s (pid %d)", TETVERSION, SERVERBUILD, getpid());
+    boot_check_environment();
+
     /* Initialise */
+    boot_debug("Step 1/13: init_main (signal handlers, log header)");
     init_main();
+    boot_debug("Step 2/13: init_game (defaults + reading/creating game.conf)");
     init_game();
+    boot_debug("Step 3/13: init_net (network buffers)");
     init_net();
+    boot_debug("Step 4/13: init_telnet_port (binding game port %d -- fails here if the port is already in use)", TELNET_PORT);
     init_telnet_port();
     /*init_query_port();*/
+    boot_debug("Step 5/13: init_winlist");
     init_winlist();
+    boot_debug("Step 6/13: init_winliststats");
     init_winliststats();
+    boot_debug("Step 7/13: init_security");
     init_security();
+    boot_debug("Step 8/13: init_banlist");
     init_banlist();
+    boot_debug("Step 9/13: readwinlist (game.winlist, if present)");
     readwinlist();
+    boot_debug("Step 10/13: readwinliststats (game.winliststats, if present)");
     readwinliststats();
+    boot_debug("Step 11/13: readbanlist (game.ban, if present)");
     readbanlist();
+    boot_debug("Step 12/13: write_motd (game.motd)");
     write_motd();
 
+    boot_debug("Step 13/13: securityread (game.secure, creating it if missing)");
     if (securityread() < 0)
       securitywrite();
-    
+
+    boot_debug("All startup steps completed. Daemonizing now (forking to background;");
+    boot_debug("from this point on, output goes to %s only). Watch for the", FILE_LOG);
+    boot_debug("'Wrote PID to file' line in the log to confirm the daemon is up.");
+
     /* Now fork out, and start a new process group */
     /* Fork. If we are the parent, quit, if child, continue */
     if ((forknum=fork()) == -1)
       {
-        printf("Error: Unable to fork new process\n");
+        printf("BOOT: FATAL: Unable to fork new process (%s)\n", strerror(errno));
+        lvprintf(0,"BOOT: FATAL: Unable to fork new process\n");
         exit(5);
       }
     if (forknum > 0) 
@@ -3457,4 +3576,4 @@ int main(int argc, char *argv[])
           
         
       }
-  }
+  }

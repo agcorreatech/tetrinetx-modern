@@ -197,6 +197,105 @@ Maintainer / Developer: Alexandro G. Corrêa <alex.linux@gmail.com>
   above, plus `/topic`/`/list`/`/join`/`/msg`/`/move`/`/set`, starting a
   game and winning, and the single-player endgame fix).
 
+### Startup (boot) debug logging
+
+- Every initialization step in `main()` is now logged with a `BOOT:`
+  prefix **before** it runs (13 numbered steps: config, network buffers,
+  port binding, winlist/stats/security/banlist loading, motd, admin
+  accounts) -- so if the process dies mid-startup, the last `BOOT:` line
+  tells you exactly which step failed. Messages go to **both** stdout
+  and `game.log` (everything happens before the daemonizing `fork()`,
+  so stdout is still attached), because the two most common startup
+  failures each blind exactly one of the two channels: a non-writable
+  working directory silently disables `game.log` (its writer ignores
+  `fopen()` failures), while a service manager hides stdout.
+- New early environment check (`boot_check_environment()`): logs the
+  working directory (with a reminder that *all* `game.*` files are
+  read/written relative to it) and probes it for writability up front --
+  failing immediately with the exact `errno` reason and a how-to-fix
+  message, instead of a series of confusing downstream failures in
+  `gamewrite()`/`writepid()`/the log itself.
+- If `game.log` can't be opened, that is now announced loudly on stdout
+  once (previously: silently ignored, leaving an empty/missing log with
+  no explanation).
+- Port-bind failure (`init_telnet_port()`) now prints the three most
+  common causes with ready-to-run diagnostic commands (server already
+  running / port in use by another process / bad `bindip` in
+  `game.conf`), instead of just "Couldn't find telnet port".
+- The post-daemonization "Wrote PID" message was only logged at
+  verbosity 9 (default is 4), so the daemon's successful startup never
+  actually appeared in the log; now logged at priority 1 as
+  `BOOT: Daemon running (pid N) ... Startup complete.` -- the milestone
+  the pre-fork messages tell the user to watch for.
+- Verified by really exercising all three paths: a clean boot (13 steps
+  visible on stdout and in `game.log`, ending with the daemon-running
+  milestone), a port-conflict boot (fails at step 4/13 with the full
+  diagnosis), and a read-only-directory boot as an unprivileged user
+  (immediate fatal with `Permission denied`, correct explanation, and
+  the log-unavailable warning on stdout).
+
+### Fixed: Docker files broken by CRLF on Windows checkouts
+
+- The repository had no `.gitattributes`, so on a Windows machine with
+  Git's default `core.autocrlf=true`, every text file -- including
+  `contrib/docker/entrypoint.sh` -- got checked out with CRLF line
+  endings. `docker build`/`docker compose up` then copied that CRLF
+  version straight into the Linux image, turning the shebang
+  `#!/usr/bin/env bash` into `#!/usr/bin/env bash\r` (not a valid
+  interpreter), so the container failed to start.
+- Added `.gitattributes`: forces LF for everything by default (so this
+  can't recur for any current or future text file), with two explicit
+  exceptions preserving the project's actual, deliberate conventions:
+  `src/*.c`/`src/*.h` and `contrib/query/src/*` keep their original CRLF
+  (`-text`, i.e. no normalization at all -- `eol=crlf` alone would
+  *not* have been enough here, since the general `text=auto` rule would
+  still normalize the stored blob to LF regardless; confirmed this the
+  hard way while writing the fix), and `bin/tetrix-modern.linux` /
+  `tetrinet_windows_client_v1.13/*.zip` are marked `binary`.
+- Ran `git add --renormalize .` to apply the new rules to already-
+  tracked files. Besides the Docker files, this also normalized five
+  other plain files that had CRLF for no particular reason
+  (`.gitignore`, `README`, `contrib/README`, `contrib/OLD.HISTORY`,
+  `contrib/OLD.WISHLIST`) to LF; the deliberately-CRLF source files
+  above were correctly left untouched.
+- `contrib/docker/Dockerfile`'s runtime stage now also strips any `\r`
+  from `entrypoint.sh` defensively (`sed -i -e 's/\r$//'`) right after
+  copying it in, as a second layer of protection against this same
+  class of problem (e.g. an existing Windows checkout made before this
+  `.gitattributes` existed, or a future edit made with a CRLF-inserting
+  editor).
+- Verified: full clean compile (source files' CRLF confirmed
+  unaffected); manually reproduced the failure mode (a CRLF copy of
+  `entrypoint.sh`) and confirmed the Dockerfile's new `sed` step fixes
+  it (`bash -n` passes after normalization, failed before).
+
+### Eliminated remaining `-Wstringop-truncation`/`-Wformat-truncation` warnings
+
+- Five bounded-copy call sites (two new admin-password copies in
+  `securityread()`, three new/changed ban-field copies in
+  `readbanlist()`, plus one pre-existing one in `net_connected()`'s
+  channel-description handling, unrelated to this release but visible
+  in the same build output) triggered GCC's truncation warnings --
+  first as `-Wstringop-truncation` on the original `strncpy()` +
+  manual-null-terminator pattern, then as `-Wformat-truncation` after
+  switching those specific sites to `snprintf()`. Both warnings are
+  GCC's static heuristic failing to prove an intentional, safe
+  truncation is actually safe -- not a real bug in either case (the
+  destination sizes were always correct), but noisy in CI/Docker build
+  logs.
+- Added `safe_strcpy(dest, destsize, src)` (`src/utils.c`/`src/utils.h`):
+  computes the copy length at runtime (`strlen()` + a comparison) and
+  uses `memcpy()`, rather than a literal `strncpy()`/`snprintf()` call
+  GCC can statically analyze against the source's declared buffer size.
+  This is the standard way to silence both of these particular GCC
+  checks without a blanket `-Wno-...` flag or per-line pragmas, since
+  neither warning is deep enough to trace a runtime-computed length
+  back to a proven-safe bound. Used at all five sites above.
+- Verified: full clean compile, zero warnings. Re-ran
+  `contrib/tests/config-migration/run.sh` (which exercises the admin
+  password and ban admin/reason/target fields this touches) --
+  all assertions still pass.
+
 ### Docker build fix: missing libc headers (`signal.h` and friends)
 
 - `contrib/docker/Dockerfile`'s build stage installed only the `gcc`

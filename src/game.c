@@ -140,8 +140,7 @@ int securityread(void)
 
                 if (!strcasecmp(id_tag,"password") && (cur_admin>=0))
                   {
-                    strncpy(security.adminlist[cur_admin].password, id_value, PASSLEN-1);
-                    security.adminlist[cur_admin].password[PASSLEN-1]=0;
+                    safe_strcpy(security.adminlist[cur_admin].password, PASSLEN, id_value);
                     error=0;
                   }
 
@@ -151,8 +150,7 @@ int securityread(void)
                     int legacy_slot = find_or_add_admin_slot("admin");
                     if (legacy_slot >= 0)
                       {
-                        strncpy(security.adminlist[legacy_slot].password, id_value, PASSLEN-1);
-                        security.adminlist[legacy_slot].password[PASSLEN-1]=0;
+                        safe_strcpy(security.adminlist[legacy_slot].password, PASSLEN, id_value);
                         needs_migration = 1;
                       }
                     error=0;
@@ -346,13 +344,13 @@ void readbanlist(void)
                 if (!strcasecmp(id_tag,"type"))
                   banlist[cur_ban].type = (!strcasecmp(id_value,"nick") ? BAN_TYPE_NICK : BAN_TYPE_IP);
                 else if (!strcasecmp(id_tag,"target"))
-                  { strncpy(banlist[cur_ban].target,id_value,UHOSTLEN-1); banlist[cur_ban].target[UHOSTLEN-1]=0; }
+                  safe_strcpy(banlist[cur_ban].target, UHOSTLEN+1, id_value);
                 else if (!strcasecmp(id_tag,"date"))
                   banlist[cur_ban].when = (time_t)atol(id_value);
                 else if (!strcasecmp(id_tag,"admin"))
-                  { strncpy(banlist[cur_ban].admin,id_value,NICKLEN-1); banlist[cur_ban].admin[NICKLEN-1]=0; }
+                  safe_strcpy(banlist[cur_ban].admin, NICKLEN+1, id_value);
                 else if (!strcasecmp(id_tag,"reason"))
-                  { strncpy(banlist[cur_ban].reason,id_value,BANREASONLEN-1); banlist[cur_ban].reason[BANREASONLEN-1]=0; }
+                  safe_strcpy(banlist[cur_ban].reason, BANREASONLEN+1, id_value);
               }
             else
               {
