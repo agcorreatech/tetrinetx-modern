@@ -762,7 +762,17 @@ int gameread(void)
         if(fscanf(file_in," %512[^\n]\n", buf) != 1)
         {
           printf("Error: Failed to read config file: %s.\n",FILE_CONF);
-        }        
+        }
+        /* Strip a trailing '\r' (game.conf saved/edited with CRLF line
+           endings, e.g. on Windows): %[^\n] stops at '\n' but happily
+           includes a preceding '\r' as a normal character. Left alone,
+           that '\r' ends up stuck onto whatever value follows an '='
+           (pidfile, bindip, topic, ...), which is invisible in most
+           displays but corrupts filenames/behaviour built from it --
+           e.g. pidfile becoming "game.pid\r", a different filename from
+           "game.pid" as far as the filesystem is concerned. */
+        j=strlen(buf);
+        if (j>0 && buf[j-1]=='\r') buf[j-1]='\0';
         i=0; j=strlen(buf);
         while( (i<j) && (buf[i]!='#') ) i++;
         if (buf[i]=='#') buf[i] = '\0'; /* Truncate string to # char */
