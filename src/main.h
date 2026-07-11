@@ -45,7 +45,7 @@
 
 /* Defines */
 #define TETVERSION "1.13"		/* What Tetrinet version we are for */
-#define SERVERBUILD "18"		/* What build we are at */
+#define SERVERBUILD "26"		/* What build we are at */
 #define NICKLEN 30			/* Maximum length of Nickname */
 #define VERLEN 10			/* Maximum length of Tetrinet version */
 #define UHOSTLEN 252			/* Maximum length of Hostname */
@@ -274,7 +274,7 @@ struct winliststats_t {
 };
 
 /* One registered admin account (nickname + password). Authenticating with
-   /op or /admin implicitly uses the already-connected player's nickname
+   /op implicitly uses the already-connected player's nickname
    (n->nick) as the "username" -- see check_admin_login(). */
 struct admin_t {
   char nick[NICKLEN+1];			/* Admin's login nickname (matched case-insensitively) */

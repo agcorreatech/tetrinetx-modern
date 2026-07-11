@@ -33,7 +33,7 @@ so each section starts from a clean slate unless it says otherwise.
 - [ ] Connect a second client with nickname `alice` again (same, exact
       spelling). **Expected:** rejected with "Nickname already exists on
       server!" — confirms nicknames are unique server-wide (this is what
-      the `/op`/`/admin` nickname-based auth below relies on).
+      the `/op` nickname-based auth below relies on).
 - [ ] Send a partyline chat message from `alice`. Confirm the second
       client (`bob`, connected normally) sees it.
 - [ ] `/me waves` — confirm it shows as an action (not a plain chat line)
@@ -58,7 +58,7 @@ so each section starts from a clean slate unless it says otherwise.
       `can_use_set()` bonus rule) — this is the one command with a
       permission rule more complex than a plain level check.
 
-## 3. `/op` / `/admin` (multi-admin, nickname-implicit auth)
+## 3. `/op` (multi-admin, nickname-implicit auth)
 
 Stop the server, edit `game.secure` to:
 
@@ -81,9 +81,8 @@ values are silently truncated). Restart the server.
       run `/op alicepass` (a valid password, but for a different
       nickname). **Expected:** "Invalid Password!" — confirms the
       password alone isn't enough; the nickname must match too.
-- [ ] Repeat the successful case using `/admin alicepass` instead of
-      `/op alicepass`. **Expected:** identical success behaviour — `/op`
-      and `/admin` are the same command under two names.
+- [ ] Run `/admin alicepass`. **Expected:** "Invalid /COMMAND!" — the
+      old `/admin` alias was removed; `/op` is the only auth command.
 - [ ] Restart the server with a **legacy-format** `game.secure`
       (`op_password=somepass`, no `[nickname]` block) and confirm: (a)
       the server logs a migration message, (b) `game.secure` is
@@ -141,7 +140,7 @@ channel:
 
 ## 6. `/kick` — lobby redirect + 5-minute rejoin cooldown
 
-As the channel's chanop (OP by position — no `/op`/`/admin` needed for
+As the channel's chanop (OP by position — no `/op` needed for
 this one, since `/kick` stays at its original chanop-level default):
 
 - [ ] With `bob` connected in `#tetrinet`, run `/kick <bob's gameslot>`.
@@ -179,7 +178,7 @@ this one, since `/kick` stays at its original chanop-level default):
       chanop, run `/kick <playernumber>` — **expected:** "You do NOT
       have access to that command!" (and `/kick` no longer appears in
       that player's `/help` either). As an **authenticated admin**
-      (`/op`/`/admin`), run the same `/kick <playernumber>` —
+      (`/op`), run the same `/kick <playernumber>` —
       **expected:** it still works exactly as before, and `/kick`
       still appears in that admin's `/help` (in the general section,
       not under `--- Admin Commands ---` — `/kick`'s default,

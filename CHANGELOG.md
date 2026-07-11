@@ -160,6 +160,31 @@ Robustness:
   "Corrêa") correctly in that encoding but mangles UTF-8's multi-byte
   sequences.
 
+### Changed: /help layout, /op-only auth, admin-only /priority, v1.13.26
+
+- Server version bumped to **v1.13.26** (`SERVERBUILD` in `src/main.h`).
+  Shown in the `/help` header, the Linux startup banner and boot log,
+  and the plain-text `version` query reply. (`TETVERSION` stays `1.13` —
+  that's the TetriNET protocol version clients are matched against.)
+- `/help` now groups `/move`, `/kick`, `/topic` and `/set help` (in that
+  order) under a new `--- Channel Configuration ---` header, using the
+  same header formatting as the existing Admin Commands section. The
+  `/topic` description was reworded to "Changes the channel description".
+- The `--- Admin Commands ---` section of `/help` is now shown ONLY to
+  authenticated admins (`LEVEL_AUTHOP`), regardless of how low the
+  individual `command_*` levels are set in `game.conf` — a normal player
+  never sees the section at all.
+- `/priority` is now usable only by authenticated admins, whatever
+  `command_priority` says (the config value can still disable it with 0,
+  but can no longer open it to lower levels) — new shared
+  `can_use_priority()` check used by both the handler and `/help`.
+- **Removed the `/admin` alias**; `/op <password>` is now the only
+  authentication command (typing `/admin` gets "Invalid /COMMAND!").
+  Its `/help` entry is deliberately the LAST row of the list, with the
+  description reworded to "Gain AUTHENTICATED SERVER ADMIN status".
+  All generated-file comments (`game.conf`, `game.secure`), the legacy
+  migration log message, and the test docs no longer mention `/admin`.
+
 ### New: beginner's guides (English + Brazilian Portuguese)
 
 - Added `How to start and play.txt` and `Como iniciar e jogar.txt` at

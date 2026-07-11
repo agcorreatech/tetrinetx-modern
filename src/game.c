@@ -21,7 +21,7 @@ int securitywrite()
     fprintf(file_out,"#   [nickname]\n");
     fprintf(file_out,"#   password=somepass\n");
     fprintf(file_out,"#\n");
-    fprintf(file_out,"# Typing \"/op <password>\" or \"/admin <password>\" in the partyline\n");
+    fprintf(file_out,"# Typing \"/op <password>\" in the partyline\n");
     fprintf(file_out,"# authenticates as the admin whose [nickname] matches the nickname you are\n");
     fprintf(file_out,"# CURRENTLY connected with (there is no separate username to type -- your\n");
     fprintf(file_out,"# TetriNET nickname IS the username, which is an extra layer of protection\n");
@@ -168,7 +168,7 @@ int securityread(void)
 
     if (needs_migration)
       {
-        lvprintf(1,"%s: Migrated legacy 'op_password' to an admin account named 'admin' -- edit %s to rename it and/or add more admins. You must now be connected with the nickname 'admin' to use /op or /admin.\n", FILE_SECURE, FILE_SECURE);
+        lvprintf(1,"%s: Migrated legacy 'op_password' to an admin account named 'admin' -- edit %s to rename it and/or add more admins. You must now be connected with the nickname 'admin' to use /op.\n", FILE_SECURE, FILE_SECURE);
         securitywrite();
       }
 
@@ -620,11 +620,11 @@ int gamewrite(void)
     fprintf(file_out,"#           0 = Disable command for anyone\n");
     fprintf(file_out,"#           1 = Enable anyone to use command\n");
     fprintf(file_out,"#           2 = Enable command only for people who are chanop or better\n");
-    fprintf(file_out,"#           3 = Enable command ONLY for authenticated ops (/op or /admin)\n");
+    fprintf(file_out,"#           3 = Enable command ONLY for authenticated ops (/op)\n");
     fprintf(file_out,"#    Special Case:\n");
     fprintf(file_out,"#    join   4 = Can join other channels. Can't create new channel (unless authop)\n");
     fprintf(file_out,"#    set    4 = Chanop can only modify settings of NON-preset channels (unless authop)\n");
-    fprintf(file_out,"#    kick   An authenticated admin (/op or /admin) can ALWAYS use /kick,\n");
+    fprintf(file_out,"#    kick   An authenticated admin (/op) can ALWAYS use /kick,\n");
     fprintf(file_out,"#           regardless of this setting -- including 0 (disabled for everyone\n");
     fprintf(file_out,"#           else). This is intentional: /kick doubles as a moderation tool.\n");
     fprintf(file_out,"#\n");

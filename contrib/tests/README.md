@@ -56,7 +56,7 @@ server, remove the temp directory) when done.
 | Nickname/team join, chat, `/me` | `gameplay/MANUAL-TEST-PLAN.md` |
 | `/help` (filtered by current permission level) | `gameplay/MANUAL-TEST-PLAN.md` |
 | `/who`, `/whois <nickname>` | `gameplay/MANUAL-TEST-PLAN.md` |
-| `/op`, `/admin` (nickname-implicit multi-admin auth) | `gameplay/MANUAL-TEST-PLAN.md` |
+| `/op` (nickname-implicit multi-admin auth) | `gameplay/MANUAL-TEST-PLAN.md` |
 | `/ban`, `/unban`, `/banlist` | `gameplay/MANUAL-TEST-PLAN.md` |
 | `/kick` (lobby redirect + 5-minute rejoin cooldown) | `gameplay/MANUAL-TEST-PLAN.md` |
 | `/priority`, `/persistant`, `/save`, `/reset`, `/clear` (admin-only) | `gameplay/MANUAL-TEST-PLAN.md` |

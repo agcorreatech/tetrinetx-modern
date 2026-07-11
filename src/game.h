@@ -51,7 +51,7 @@ void writewinlisttxt(void);
 
 /* Admin accounts (game.secure): read/write/init, and login check.
    check_admin_login() compares against the already-connected player's own
-   nickname -- see its callers in main.c ("/op"/"/admin" handler). */
+   nickname -- see its callers in main.c ("/op" handler). */
 int securitywrite(void);
 int securityread(void);
 void init_security(void);

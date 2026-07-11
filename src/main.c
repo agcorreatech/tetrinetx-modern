@@ -274,47 +274,68 @@ char can_use_kick(struct net_t *n)
     return ( (game.command_kick>0 && passed_level(n,game.command_kick)) || passed_level(n,LEVEL_AUTHOP) );
   }
 
+/* can_use_priority(n) - /priority is restricted to authenticated admins
+   (LEVEL_AUTHOP), regardless of what command_priority in game.conf says:
+   the config value can still DISABLE the command (0) but can no longer
+   open it up to lower levels. Shared by the handler and /help. */
+char can_use_priority(struct net_t *n)
+  {
+    return ( game.command_priority>0 && passed_level(n,LEVEL_AUTHOP) );
+  }
+
 /* help_table[] - Data-driven list of every built-in command, used by /help.
    Each row is shown only if the REQUESTING player currently passes its
    check (custom_check if set, otherwise passed_level(n,*level_ptr); a NULL
-   level_ptr with no custom_check means "always shown", e.g. /me). Rows
-   with admin_section=1 are grouped under a separate "Admin Commands"
-   header, which itself only appears if at least one such row currently
-   qualifies -- so regular players never see an empty admin header. */
+   level_ptr with no custom_check means "always shown", e.g. /me). Rows are
+   grouped by 'section': HELP_SECTION_CHANCONFIG rows go under a
+   "Channel Configuration" header and HELP_SECTION_ADMIN rows under an
+   "Admin Commands" header; each header only appears if at least one of
+   its rows currently qualifies, so players never see an empty header.
+   The Admin Commands section as a whole is additionally restricted to
+   authenticated admins (LEVEL_AUTHOP) in the /help loop, whatever the
+   per-command levels in game.conf say. Table order is display order --
+   /op is deliberately the last row so it always closes the list. */
+#define HELP_SECTION_GENERAL    0
+#define HELP_SECTION_CHANCONFIG 1
+#define HELP_SECTION_ADMIN      2
+
 struct help_entry_t {
   char *usage;
   char *description;
   int  *level_ptr;
   char (*custom_check)(struct net_t *n);
-  char admin_section;
+  char section;
 };
 
 struct help_entry_t help_table[] = {
   /* --- General commands --- */
-  { "/who",                          "Lists connected players",                    &game.command_who,        NULL, 0 },
-  { "/whois <nickname>",             "Shows detailed info about a player",         &game.command_whois,      NULL, 0 },
-  { "/winlist [n]",                  "Shows top n winlist entries",                &game.command_winlist,    NULL, 0 },
-  { "/motd",                         "Displays the welcome message",               &game.command_motd,       NULL, 0 },
-  { "/msg <playernumber(s)> <msg>",  "Privately messages player(s)",               &game.command_msg,        NULL, 0 },
-  { "/me <action>",                  "Performs an action",                         NULL,                     NULL, 0 },
-  { "/list",                         "Lists available virtual TetriNET channels",  &game.command_list,       NULL, 0 },
-  { "/join <#channel|number>",       "Joins or creates a virtual tetrinet channel",&game.command_join,       NULL, 0 },
-  { "/topic <text>",                 "Changes the channel topic",                  &game.command_topic,      NULL, 0 },
-  { "/move <playernum> <newnum>",    "Moves a player to a new player number",      &game.command_move,       NULL, 0 },
-  { "/set help",                     "Shows/changes channel config options",       NULL,                     can_use_set, 0 },
-  { "/op <password>",                "Gain AUTHENTICATED OP status",               &game.command_op,         NULL, 0 },
-  { "/admin <password>",             "Gain AUTHENTICATED OP status (alias /op)",   &game.command_op,         NULL, 0 },
-  { "/kick <playernumber(s)>",       "Kicks player(s) to the server's lobby",      NULL,                     can_use_kick, 0 },
+  { "/who",                          "Lists connected players",                    &game.command_who,        NULL, HELP_SECTION_GENERAL },
+  { "/whois <nickname>",             "Shows detailed info about a player",         &game.command_whois,      NULL, HELP_SECTION_GENERAL },
+  { "/winlist [n]",                  "Shows top n winlist entries",                &game.command_winlist,    NULL, HELP_SECTION_GENERAL },
+  { "/motd",                         "Displays the welcome message",               &game.command_motd,       NULL, HELP_SECTION_GENERAL },
+  { "/msg <playernumber(s)> <msg>",  "Privately messages player(s)",               &game.command_msg,        NULL, HELP_SECTION_GENERAL },
+  { "/me <action>",                  "Performs an action",                         NULL,                     NULL, HELP_SECTION_GENERAL },
+  { "/list",                         "Lists available virtual TetriNET channels",  &game.command_list,       NULL, HELP_SECTION_GENERAL },
+  { "/join <#channel|number>",       "Joins or creates a virtual tetrinet channel",&game.command_join,       NULL, HELP_SECTION_GENERAL },
 
-  /* --- Admin commands (only shown once authenticated via /op or /admin) --- */
-  { "/priority <1-99>",              "Changes channel priority",                   &game.command_priority,   NULL, 1 },
-  { "/clear",                        "Clears the winlist",                         &game.command_clear,      NULL, 1 },
-  { "/persistant <0/1>",             "Makes a channel persistant",                 &game.command_persistant, NULL, 1 },
-  { "/save",                        "Saves game config and persistant channels",  &game.command_save,       NULL, 1 },
-  { "/reset",                        "Reloads config from game.conf",              &game.command_reset,      NULL, 1 },
-  { "/ban <playernumber> [reason]",  "Bans a player's IP and nickname",            &game.command_ban,        NULL, 1 },
-  { "/unban ip|nick <target>",       "Removes a ban entry",                        &game.command_ban,        NULL, 1 },
-  { "/banlist",                     "Lists all active bans",                       &game.command_banlist,    NULL, 1 },
+  /* --- Channel configuration --- */
+  { "/move <playernum> <newnum>",    "Moves a player to a new player number",      &game.command_move,       NULL, HELP_SECTION_CHANCONFIG },
+  { "/kick <playernumber(s)>",       "Kicks player(s) to the server's lobby",      NULL,                     can_use_kick, HELP_SECTION_CHANCONFIG },
+  { "/topic <text>",                 "Changes the channel description",            &game.command_topic,      NULL, HELP_SECTION_CHANCONFIG },
+  { "/set help",                     "Shows/changes channel config options",       NULL,                     can_use_set, HELP_SECTION_CHANCONFIG },
+
+  /* --- Admin commands (only shown once authenticated via /op) --- */
+  { "/priority <1-99>",              "Changes channel priority",                   NULL,                     can_use_priority, HELP_SECTION_ADMIN },
+  { "/clear",                        "Clears the winlist",                         &game.command_clear,      NULL, HELP_SECTION_ADMIN },
+  { "/persistant <0/1>",             "Makes a channel persistant",                 &game.command_persistant, NULL, HELP_SECTION_ADMIN },
+  { "/save",                        "Saves game config and persistant channels",  &game.command_save,       NULL, HELP_SECTION_ADMIN },
+  { "/reset",                        "Reloads config from game.conf",              &game.command_reset,      NULL, HELP_SECTION_ADMIN },
+  { "/ban <playernumber> [reason]",  "Bans a player's IP and nickname",            &game.command_ban,        NULL, HELP_SECTION_ADMIN },
+  { "/unban ip|nick <target>",       "Removes a ban entry",                        &game.command_ban,        NULL, HELP_SECTION_ADMIN },
+  { "/banlist",                     "Lists all active bans",                       &game.command_banlist,    NULL, HELP_SECTION_ADMIN },
+
+  /* /op is intentionally last (see comment above) */
+  { "/op <password>",                "Gain AUTHENTICATED SERVER ADMIN status",     &game.command_op,         NULL, HELP_SECTION_GENERAL },
 
   { NULL, NULL, NULL, NULL, 0 }
 };
@@ -1000,7 +1021,7 @@ void net_connected(struct net_t *n, char *buf)
                 /* First parse to see if it's a server command */
                 /* /kick stays at its default chanop-level requirement
                    (command_kick=2) for everyone else, but an authenticated
-                   admin (/op or /admin) can ALWAYS use it, regardless of
+                   admin (/op) can ALWAYS use it, regardless of
                    how command_kick is configured -- including the server
                    owner setting command_kick=0 to disable it for everyone
                    else. Without the "|| passed_level(n,LEVEL_AUTHOP)" on
@@ -1579,7 +1600,7 @@ void net_connected(struct net_t *n, char *buf)
                 if ( !strncasecmp(MSG, "/priority", 9) && (game.command_priority>0))
                   {
                     valid_param=2;
-                    if ( passed_level(n,game.command_priority) )
+                    if ( can_use_priority(n) )
                       {
                         /* Guard against reading past the terminator when no
                            argument was given; require a non-empty value so
@@ -2154,16 +2175,15 @@ void net_connected(struct net_t *n, char *buf)
                 
             
                 /* Take "ops" - Suggestion by (jawfx@hotmail.com 21/9/98) */
-                /* /op <password>  and  /admin <password> - identical, /admin is just an alias.
-                   The "username" is implicit: it's the nickname this connection is ALREADY
-                   using (n->nick). Since nicknames are unique server-wide and can't be
-                   changed mid-session, this doubles as an extra layer of protection: you
-                   need to both know the password AND be connected under that exact admin
-                   nickname. */
-                if ( (!strncasecmp(MSG, "/op", 3) || !strncasecmp(MSG, "/admin", 6)) && (game.command_op>0))
+                /* /op <password> - The "username" is implicit: it's the nickname this
+                   connection is ALREADY using (n->nick). Since nicknames are unique
+                   server-wide and can't be changed mid-session, this doubles as an
+                   extra layer of protection: you need to both know the password AND
+                   be connected under that exact admin nickname. */
+                if ( !strncasecmp(MSG, "/op", 3) && (game.command_op>0))
                   {
                     valid_param=2;
-                    P = (!strncasecmp(MSG,"/admin",6)) ? MSG+7 : MSG+4;
+                    P = MSG+4;
                     if (securityread() < 0)
                       securitywrite();
 
@@ -2229,15 +2249,23 @@ void net_connected(struct net_t *n, char *buf)
                     valid_param=2;
                     if (passed_level(n,game.command_help))
                       {
+                        char help_is_chanconfig_section_shown;
                         char help_is_admin_section_shown;
                         int help_i;
                         char help_can_use;
 
                         tprintf(n->sock,"pline 0 HELP - Server Commands - Tetrinet X Modern - v%s.%s\xff", TETVERSION, SERVERBUILD);
 
+                        help_is_chanconfig_section_shown = 0;
                         help_is_admin_section_shown = 0;
                         for (help_i=0; help_table[help_i].usage != NULL; help_i++)
                           {
+                            /* The whole Admin Commands section is reserved for
+                               authenticated admins, whatever the individual
+                               command_* levels in game.conf are set to. */
+                            if (help_table[help_i].section == HELP_SECTION_ADMIN && !passed_level(n,LEVEL_AUTHOP))
+                              continue;
+
                             if (help_table[help_i].custom_check != NULL)
                               help_can_use = help_table[help_i].custom_check(n);
                             else if (help_table[help_i].level_ptr == NULL)
@@ -2247,7 +2275,12 @@ void net_connected(struct net_t *n, char *buf)
 
                             if (!help_can_use) continue;
 
-                            if (help_table[help_i].admin_section && !help_is_admin_section_shown)
+                            if (help_table[help_i].section == HELP_SECTION_CHANCONFIG && !help_is_chanconfig_section_shown)
+                              {
+                                tprintf(n->sock,"pline 0 %c--- Channel Configuration ---\xff", RED);
+                                help_is_chanconfig_section_shown = 1;
+                              }
+                            if (help_table[help_i].section == HELP_SECTION_ADMIN && !help_is_admin_section_shown)
                               {
                                 tprintf(n->sock,"pline 0 %c--- Admin Commands ---\xff", RED);
                                 help_is_admin_section_shown = 1;
