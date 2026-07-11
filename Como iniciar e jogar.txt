@@ -20,10 +20,17 @@ Este guia cobre os dois, passo a passo.
  PARTE 1 -- Iniciando o servidor
 ----------------------------------------------------------------
 
-Escolha UMA das duas opções abaixo. Docker é a mais fácil se
-você tem o Docker Desktop instalado (funciona em Windows, Mac e
-Linux). A opção Linux direto precisa de uma máquina Linux (ou
-WSL) com gcc.
+Escolha UMA das três opções abaixo:
+
+  A. Docker           -- a mais fácil no Windows e no Mac
+                         (também funciona no Linux); precisa do
+                         Docker instalado.
+  B. Binário pronto   -- a mais fácil no Linux: o servidor já
+                         vem compilado no projeto, não precisa
+                         instalar nada.
+  C. Compilar você mesmo -- só se a opção B não rodar na sua
+                         máquina (distro antiga, processador
+                         ARM) ou se você alterou o código-fonte.
 
 O servidor escuta na porta TCP 31457. É a única porta que os
 jogadores precisam alcançar.
@@ -62,29 +69,38 @@ Para parar o servidor depois:
      docker compose -f contrib/docker/docker-compose.yml down
 
 
-OPÇÃO B -- Direto no Linux (sem Docker)
----------------------------------------
+OPÇÃO B -- Direto no Linux, usando o binário pronto
+----------------------------------------------------
 
-Requisitos: uma máquina Linux (ou WSL no Windows) com gcc
-            instalado (no Ubuntu/Debian: sudo apt install
-            build-essential)
+O projeto já vem com o servidor compilado:
+bin/tetrix-modern.linux -- ou seja, no Linux não precisa
+instalar nem compilar nada.
+
+Requisitos: um Linux 64 bits (x86_64) de 2021 para cá -- ex.:
+            Ubuntu 22.04+, Debian 12+, Fedora 35+, RHEL/Rocky
+            9+ -- ou WSL no Windows. O binário depende apenas
+            da biblioteca C do sistema (glibc 2.34 ou mais
+            nova), que todas essas distros já têm. Nenhum
+            pacote para instalar.
 
 1. Abra um terminal na pasta raiz deste repositório.
 
-2. Compile o servidor (um comando só, leva poucos segundos):
-
-     cd src && sed -i -e 's/\r$//' compile.linux && bash compile.linux && cd ..
-
-   Isso cria o programa  bin/tetrix-modern.linux
-
-3. Crie uma pasta para o servidor morar e inicie-o lá dentro
-   (o servidor grava a configuração, o placar e o log na pasta
-   DE ONDE ele é iniciado):
+2. Crie uma pasta para o servidor morar e copie para lá o
+   binário e os arquivos de configuração padrão (o servidor
+   grava a configuração, o placar e o log na pasta DE ONDE ele
+   é iniciado):
 
      mkdir -p ~/tetrinetx-server
      cp bin/tetrix-modern.linux bin/game.conf bin/game.motd ~/tetrinetx-server/
      cd ~/tetrinetx-server
+
+3. Garanta que o binário é executável e inicie-o:
+
+     chmod +x tetrix-modern.linux
      ./tetrix-modern.linux
+
+   (O chmod só é realmente necessário se você baixou o projeto
+   como ZIP em vez de usar o git, mas nunca faz mal.)
 
    O servidor imprime as etapas de inicialização e depois vai
    sozinho para segundo plano (ele "daemoniza"). A partir daí,
@@ -99,6 +115,37 @@ Requisitos: uma máquina Linux (ou WSL no Windows) com gcc
 Para parar o servidor depois:
 
      kill $(cat ~/tetrinetx-server/game.pid)
+
+Se ao iniciar aparecer um erro como
+  "version `GLIBC_2.34' not found"        (distro antiga demais), ou
+  "cannot execute binary file: Exec format error"
+                                          (CPU que não é x86_64,
+                                          ex.: Raspberry Pi/ARM),
+o binário pronto não roda nessa máquina -- compile o seu
+próprio usando a opção C abaixo.
+
+
+OPÇÃO C -- Compilando o código-fonte no Linux
+----------------------------------------------
+
+Só é necessária se a opção B não rodou na sua máquina, ou se
+você modificou o código-fonte.
+
+Requisitos: uma máquina Linux (ou WSL no Windows) com gcc
+            instalado (no Ubuntu/Debian: sudo apt install
+            build-essential)
+
+1. Abra um terminal na pasta raiz deste repositório.
+
+2. Compile o servidor (um comando só, leva poucos segundos):
+
+     cd src && sed -i -e 's/\r$//' compile.linux && bash compile.linux && cd ..
+
+   Isso (re)cria o programa  bin/tetrix-modern.linux  compilado
+   para a SUA máquina.
+
+3. Agora siga a opção B a partir do passo 2 -- o binário recém-
+   compilado é usado exatamente do mesmo jeito.
 
 
 ----------------------------------------------------------------

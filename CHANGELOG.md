@@ -164,7 +164,9 @@ Robustness:
 
 - Added `How to start and play.txt` and `Como iniciar e jogar.txt` at
   the repo root: step-by-step beginner documentation covering running
-  the server (Docker compose or the Linux binary directly), running the
+  the server (Docker compose, the prebuilt `bin/tetrix-modern.linux`
+  binary directly — needs only a 2021+ x86_64 distro with glibc >= 2.34,
+  no packages — or compiling from source as the fallback), running the
   bundled TetriNET 1.13 client (`TETRINET.EXE`, natively or via Wine),
   connecting (address/nickname/team, port 31457), and playing (moderator
   role, default keys, special blocks, winlist scoring, troubleshooting).
