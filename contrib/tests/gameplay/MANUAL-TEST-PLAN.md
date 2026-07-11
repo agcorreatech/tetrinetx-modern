@@ -293,6 +293,15 @@ As an authenticated admin (section 3):
       Congratulations!" (or "... Team **<team>**! ..." in a team game).
 - [ ] As chanop, click **Stop game** mid-game. **Expected:** every client
       shows "*** The Game Has **Ended** by **<nick>**".
+- [ ] With 2 players in a game, have one of them **disconnect** (close
+      the client mid-game). **Expected:** the remaining player is
+      declared the winner exactly as in a normal win — "*** The Game Has
+      **Ended** - The winner is **<nick>**! Congratulations!", `playerwon`,
+      and `/winlist` score updated (previously the game just ended with
+      no winner).
+- [ ] Same, but the losing player leaves via `/join #anotherchannel`
+      (and again via being `/kick`ed). **Expected:** same winner
+      treatment for the player who stayed.
 - [ ] With exactly **one** player in a channel, start a game and
       deliberately lose (top out). **Expected:** the game ends cleanly
       (not stuck in `STATE_INGAME` forever) and the partyline shows

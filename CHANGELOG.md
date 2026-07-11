@@ -99,6 +99,14 @@ Maintainer / Developer: Alexandro G. Corrêa <alex.linux@gmail.com>
   bundled client's own generic "The Game Has Started/Ended" lines were
   blanked out so the attributed server lines aren't shown twice
   (unpatched clients will see both).
+- When the last opponent leaves mid-game (disconnects, /joins another
+  channel or is kicked), the remaining player/team is now declared the
+  winner — same announcement, winlist points and extended stats as a
+  normal victory. Previously the game just ended silently with no
+  winner, punishing the player who stayed.
+- /help usage strings standardized on <player-number> (was an
+  inconsistent mix of <playernumber>, <playernum> and <newnum>), and
+  /join's argument clarified to <#channel|channel-number>.
 - Bundled Windows client (TETRINET.EXE inside the client zip) updated
   with two clearer messages: "*** <nick> is Now Alone" now reads
   "*** <nick> has No Team", and "*** Server has Shut Down" — which the

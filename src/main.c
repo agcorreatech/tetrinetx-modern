@@ -332,22 +332,22 @@ struct help_entry_t {
 struct help_entry_t help_table[] = {
   /* --- General commands --- */
   { "/list",                         "Lists available virtual TetriNET channels",  &game.command_list,       NULL, HELP_SECTION_GENERAL },
-  { "/join <#channel|number>",       "Joins or creates a virtual tetrinet channel",&game.command_join,       NULL, HELP_SECTION_GENERAL },
+  { "/join <#channel|channel-number>","Joins or creates a virtual tetrinet channel",&game.command_join,      NULL, HELP_SECTION_GENERAL },
   { "/who",                          "Lists connected players",                    &game.command_who,        NULL, HELP_SECTION_GENERAL },
   { "/whois <nickname>",             "Shows detailed info about a player",         &game.command_whois,      NULL, HELP_SECTION_GENERAL },
-  { "/msg <playernumber(s)> <msg>",  "Privately messages player(s)",               &game.command_msg,        NULL, HELP_SECTION_GENERAL },
+  { "/msg <player-number(s)> <msg>", "Privately messages player(s)",               &game.command_msg,        NULL, HELP_SECTION_GENERAL },
   { "/me <action>",                  "Performs an action",                         NULL,                     NULL, HELP_SECTION_GENERAL },
   { "/winlist [n]",                  "Shows top n winlist entries",                &game.command_winlist,    NULL, HELP_SECTION_GENERAL },
   { "/motd",                         "Displays the server welcome message",        &game.command_motd,       NULL, HELP_SECTION_GENERAL },
 
   /* --- Channel configuration --- */
-  { "/move <playernum> <newnum>",    "Moves a player to a new player number",      &game.command_move,       NULL, HELP_SECTION_CHANCONFIG },
-  { "/kick <playernumber(s)>",       "Kicks player(s) to the server's lobby",      NULL,                     can_use_kick, HELP_SECTION_CHANCONFIG },
+  { "/move <player-number> <new-player-number>", "Moves a player to a new player number", &game.command_move, NULL, HELP_SECTION_CHANCONFIG },
+  { "/kick <player-number(s)>",      "Kicks player(s) to the server's lobby",      NULL,                     can_use_kick, HELP_SECTION_CHANCONFIG },
   { "/topic <text>",                 "Changes the channel description",            &game.command_topic,      NULL, HELP_SECTION_CHANCONFIG },
   { "/set help",                     "Shows/changes channel config options",       NULL,                     can_use_set, HELP_SECTION_CHANCONFIG },
 
   /* --- Admin commands (only shown once authenticated via /op) --- */
-  { "/ban <playernumber> [reason]",  "Bans a player's IP and nickname",            &game.command_ban,        NULL, HELP_SECTION_ADMIN },
+  { "/ban <player-number> [reason]", "Bans a player's IP and nickname",            &game.command_ban,        NULL, HELP_SECTION_ADMIN },
   { "/unban ip|nickname <target>",   "Removes a ban entry",                        &game.command_ban,        NULL, HELP_SECTION_ADMIN },
   { "/banlist",                     "Lists all active bans",                       &game.command_banlist,    NULL, HELP_SECTION_ADMIN },
   { "/password <new-password>",      "Change the admin password",                  NULL,                     NULL, HELP_SECTION_ADMIN },
@@ -485,6 +485,86 @@ struct channel_t *find_or_create_lobby_channel(struct channel_t *exclude_chan)
     return NULL;
   }
 
+/* end_game_for_leaver(chan, leaver, declare_winner) - Ends chan's game
+   because a playing player left it mid-game (disconnect, /join into
+   another channel, or a /kick/move). If declare_winner is set and exactly
+   one player/team is left playing, they are declared the winner exactly
+   as if every opponent had topped out: winlist points + extended stats,
+   playerwon broadcast, field resync and the server announcement. With no
+   survivor (or declare_winner 0, e.g. a non-playing spectator left) the
+   game just ends quietly, as it always did. 'leaver' is excluded from
+   everything: it may still be on chan's player list with a dead socket
+   (disconnect path) or already removed from it (channel-change paths). */
+void end_game_for_leaver(struct channel_t *chan, struct net_t *leaver, char declare_winner)
+  {
+    struct net_t *nsock, *ns1, *ns2;
+    int teams;
+    char lastteam[TEAMLEN+4];
+
+    /* Count the distinct teams still playing (same counting the
+       playerlost handler uses; players with no team count individually) */
+    teams=0; ns1=NULL; lastteam[0]=0;
+    nsock=chan->net;
+    while (nsock!=NULL)
+      {
+        if ( (nsock!=leaver) && (nsock->type == NET_CONNECTED) && (nsock->status == STAT_PLAYING) )
+          {
+            if (strcasecmp(lastteam,nsock->team))
+              { teams++; ns1=nsock; strcpy(lastteam,nsock->team); }
+            else if (lastteam[0]==0)
+              { teams++; ns1=nsock; }
+          }
+        nsock=nsock->next;
+      }
+    if ( (!declare_winner) || (teams != 1) ) ns1=NULL;
+
+    if (ns1!=NULL)
+      { /* Score the win, same as the normal endgame path */
+        if (strlen(ns1->team) > 0)
+          { updatewinlist(ns1->team,'t',3); updatewinliststats(ns1->team,'t',ns1->level); }
+        else
+          { updatewinlist(ns1->nick,'p',3); updatewinliststats(ns1->nick,'p',ns1->level); }
+        lvprintf(4,"#%s-%s wins: last one left in the game\n", chan->name, ns1->nick);
+      }
+
+    chan->status=STATE_ONLINE;
+    nsock=chan->net;
+    while (nsock!=NULL)
+      {
+        if ( (nsock!=leaver) && (nsock->type == NET_CONNECTED) )
+          {
+            tprintf(nsock->sock,"endgame\xff");
+            nsock->status=STAT_NOTPLAYING;
+            nsock->timeout=game.timeout_outgame;
+            if (ns1!=NULL)
+              {
+                tprintf(nsock->sock,"playerwon %d\xff", ns1->gameslot);
+                /* Send every playing field, as the normal winner path does */
+                ns2=chan->net;
+                while (ns2!=NULL)
+                  {
+                    if ( (ns2!=nsock) && (ns2!=leaver) && (ns2->type == NET_CONNECTED) )
+                      sendfield(nsock,ns2);
+                    ns2=ns2->next;
+                  }
+                if (chan->serverannounce)
+                  {
+                    if (strlen(ns1->team) > 0)
+                      tprintf(nsock->sock,"pline 0 %c*** The Game Has %cEnded%c - The winner is Team %c%s%c! Congratulations!\xff", RED, BOLD, BOLD, BOLD, ns1->team, BOLD);
+                    else
+                      tprintf(nsock->sock,"pline 0 %c*** The Game Has %cEnded%c - The winner is %c%s%c! Congratulations!\xff", RED, BOLD, BOLD, BOLD, ns1->nick, BOLD);
+                  }
+                /* Winlist per-player, so it's never written to the
+                   leaver's (possibly already dead) socket */
+                sendwinlist(chan,nsock);
+              }
+          }
+        nsock=nsock->next;
+      }
+    if (ns1!=NULL)
+      writewinlist();
+  }
+
 /* move_player_to_channel(n, new_chan) - Moves an already-connected player
    from their current channel into new_chan, replaying the same protocol
    sequence /join already sends a player when switching channels
@@ -498,11 +578,15 @@ void move_player_to_channel(struct net_t *n, struct channel_t *new_chan)
   {
     struct channel_t *ochan, *c, *oc;
     struct net_t *nsock;
-    int num1, num2, num3, num4;
+    int num1, num2, num3, num4, num5;
     int x, y;
 
     ochan = n->channel;
     if (ochan == new_chan) return;   /* nowhere to move */
+
+    /* Remember whether the mover was actually playing, BEFORE the status
+       is overwritten below -- decides if the last one left is a winner */
+    num5 = (n->status == STAT_PLAYING);
 
     if ( (ochan->status == STATE_INGAME) || (ochan->status == STATE_PAUSED) )
       {
@@ -585,20 +669,7 @@ void move_player_to_channel(struct net_t *n, struct channel_t *new_chan)
       }
 
     if ( (num4 <= 1) && (ochan->status == STATE_INGAME) )
-      {
-        nsock = ochan->net;
-        while (nsock!=NULL)
-          {
-            if (nsock->type == NET_CONNECTED)
-              {
-                tprintf(nsock->sock,"endgame\xff");
-                nsock->status=STAT_NOTPLAYING;
-                nsock->timeout=game.timeout_outgame;
-              }
-            nsock=nsock->next;
-          }
-        ochan->status = STATE_ONLINE;
-      }
+      end_game_for_leaver(ochan, n, num5);
 
     if ( (numallplayers(ochan) == 0) && (!ochan->persistant) )
       {
@@ -1082,7 +1153,7 @@ void net_connected(struct net_t *n, char *buf)
                 /* Boundary check ("ban"[4] must be end-of-string or a
                    space): without it, "/banlist" also starts with "/ban"
                    and would trigger THIS handler too, dumping a spurious
-                   "Usage: /ban <playernumber> [reason]" alongside the
+                   "Usage: /ban <player-number> [reason]" alongside the
                    actual banlist output. Same class of bug as /who vs
                    /whois above. */
                 if ( !strncasecmp(MSG, "/ban", 4) && (MSG[4]=='\0' || MSG[4]==' ') && (game.command_ban>0) )
@@ -1112,7 +1183,7 @@ void net_connected(struct net_t *n, char *buf)
                           }
 
                         if (n_to==NULL)
-                          tprintf(n->sock,"pline 0 %cUsage: /ban <playernumber> [reason]\xff", RED);
+                          tprintf(n->sock,"pline 0 %cUsage: /ban <player-number> [reason]\xff", RED);
                         else
                           {
                             sprintf(ip_str, "%lu.%lu.%lu.%lu",
@@ -1965,33 +2036,12 @@ void net_connected(struct net_t *n, char *buf)
                                 if ( n->channel->status == STATE_PAUSED )
                                   tprintf(n->sock,"pause 1\xff");
                                                                                
-                                /* If 1 or less players/teams now are playing, AND the player that quit WAS playing, STOPIT */
+                                /* If 1 or less players/teams now are playing, AND the player that
+                                   quit WAS playing, end the game -- declaring the last one left
+                                   the winner (n is already off ochan->net here, remnet(ochan,n)
+                                   ran earlier in this same handler) */
                                 if ( (num4 <= 1) && (ochan->status == STATE_INGAME) && (n->status == STAT_PLAYING) )
-                                  {
-                                    nsock=ochan->net;
-                                    while (nsock!=NULL)
-                                      {
-                                        /* BUGFIX: this used to read "if ( (nsock=n) && ...)" -- an
-                                           assignment where a comparison was clearly intended. Two
-                                           problems: (1) it always evaluated true (an assignment
-                                           expression's value is the assigned value, non-NULL here),
-                                           and (2) it overwrote the loop iterator itself, so the very
-                                           next "nsock=nsock->next" advanced from n's position rather
-                                           than from where the loop actually was, corrupting the
-                                           traversal of ochan->net. No comparison against n is needed
-                                           here at all: by this point n has already been removed from
-                                           ochan->net (remnet(ochan,n) ran earlier in this same
-                                           handler), so it can never appear in this loop anyway. */
-                                        if (nsock->type == NET_CONNECTED)
-                                          {
-                                            tprintf(nsock->sock,"endgame\xff");
-                                            nsock->status=STAT_NOTPLAYING;
-                                            nsock->timeout=game.timeout_outgame;
-                                          }
-                                        nsock=nsock->next;
-                                      }
-                                    ochan->status = STATE_ONLINE;
-                                  }
+                                  end_game_for_leaver(ochan, n, 1);
           
                                 /* If no players, then we delete the channel IF it's not persistant*/
                                 if ( (numallplayers(ochan) == 0) && (ochan!=n->channel) && (!ochan->persistant) )
@@ -2189,7 +2239,7 @@ void net_connected(struct net_t *n, char *buf)
                               }
                           }
                         else
-                          tprintf(n->sock,"pline 0 %c/move %c<playernumber> <newplayernumber>\xff", RED, BLUE);
+                          tprintf(n->sock,"pline 0 %c/move %c<player-number> <new-player-number>\xff", RED, BLUE);
 
                       }  
                     else
@@ -3454,22 +3504,12 @@ void lostnet(struct net_t *n)
             nsock=nsock->next;
           }
         
-        /* If 1 or less players/teams now are playing, AND the player that quit WAS playing, STOPIT */
+        /* If 1 or less players/teams now are playing, AND the player that
+           quit WAS playing, end the game -- declaring the last one left the
+           winner (n is still on the channel list here with a dead socket;
+           end_game_for_leaver() excludes it from everything) */
         if ( (playing <= 1) && (n->channel->status == STATE_INGAME) && (n->status == STAT_PLAYING) )
-          {
-            nsock=n->channel->net;
-            while (nsock!=NULL)
-              {
-                if ( (nsock!=n) && (nsock->type == NET_CONNECTED))
-                  {
-                    tprintf(nsock->sock,"endgame\xff");
-                    nsock->status=STAT_NOTPLAYING;
-                    nsock->timeout=game.timeout_outgame;
-                  }
-                nsock=nsock->next;
-              }
-            n->channel->status = STATE_ONLINE;
-          }
+          end_game_for_leaver(n->channel, n, 1);
       }
           
     /* If we're the only numplayers players, then we delete the channel */
