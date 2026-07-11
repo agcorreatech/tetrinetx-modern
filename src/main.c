@@ -299,13 +299,27 @@ char can_use_priority(struct net_t *n)
    "Channel Configuration" header and HELP_SECTION_ADMIN rows under an
    "Admin Commands" header; each header only appears if at least one of
    its rows currently qualifies, so players never see an empty header.
-   The Admin Commands section as a whole is additionally restricted to
+   Every section from HELP_SECTION_ADMIN up is additionally restricted to
    authenticated admins (LEVEL_AUTHOP) in the /help loop, whatever the
    per-command levels in game.conf say. Table order is display order --
-   /op is deliberately the last row so it always closes the list. */
+   /op is deliberately the last row so it always closes the list (and is
+   hidden entirely once authenticated). */
 #define HELP_SECTION_GENERAL    0
 #define HELP_SECTION_CHANCONFIG 1
 #define HELP_SECTION_ADMIN      2
+#define HELP_SECTION_CHANADMIN  3
+#define HELP_SECTION_SRVADMIN   4
+
+/* Header text per section (indexed by the HELP_SECTION_* value; GENERAL has
+   no header). Each prints once, preceded by a blank spacer line, in bold
+   black -- see the /help loop. */
+char *help_section_headers[] = {
+  NULL,
+  "--- Channel Configuration ---",
+  "--- Admin Commands ---",
+  "--- Channel Admin Commands ---",
+  "--- Server Admin Commands ---"
+};
 
 struct help_entry_t {
   char *usage;
@@ -333,15 +347,19 @@ struct help_entry_t help_table[] = {
   { "/set help",                     "Shows/changes channel config options",       NULL,                     can_use_set, HELP_SECTION_CHANCONFIG },
 
   /* --- Admin commands (only shown once authenticated via /op) --- */
-  { "/priority <1-99>",              "Changes channel priority",                   NULL,                     can_use_priority, HELP_SECTION_ADMIN },
-  { "/clear",                        "Clears the winlist",                         &game.command_clear,      NULL, HELP_SECTION_ADMIN },
-  { "/persistant <0/1>",             "Makes a channel persistant",                 &game.command_persistant, NULL, HELP_SECTION_ADMIN },
-  { "/save",                        "Saves game config and persistant channels",  &game.command_save,       NULL, HELP_SECTION_ADMIN },
-  { "/reset",                        "Reloads config from game.conf",              &game.command_reset,      NULL, HELP_SECTION_ADMIN },
   { "/ban <playernumber> [reason]",  "Bans a player's IP and nickname",            &game.command_ban,        NULL, HELP_SECTION_ADMIN },
-  { "/unban ip|nick <target>",       "Removes a ban entry",                        &game.command_ban,        NULL, HELP_SECTION_ADMIN },
+  { "/unban ip|nickname <target>",   "Removes a ban entry",                        &game.command_ban,        NULL, HELP_SECTION_ADMIN },
   { "/banlist",                     "Lists all active bans",                       &game.command_banlist,    NULL, HELP_SECTION_ADMIN },
-  { "/password <new-password>",      "Changes your own admin password",            NULL,                     NULL, HELP_SECTION_ADMIN },
+  { "/password <new-password>",      "Change the admin password",                  NULL,                     NULL, HELP_SECTION_ADMIN },
+
+  /* --- Channel admin commands --- */
+  { "/priority <1-99>",              "Changes channel order in the list",          NULL,                     can_use_priority, HELP_SECTION_CHANADMIN },
+  { "/persistant <0/1>",             "Makes a channel persistant",                 &game.command_persistant, NULL, HELP_SECTION_CHANADMIN },
+  { "/save",                        "Saves game config and persistant channels",  &game.command_save,       NULL, HELP_SECTION_CHANADMIN },
+
+  /* --- Server admin commands --- */
+  { "/reset",                        "Reloads config from game.conf",              &game.command_reset,      NULL, HELP_SECTION_SRVADMIN },
+  { "/clear",                        "Clears the winlist",                         &game.command_clear,      NULL, HELP_SECTION_SRVADMIN },
 
   /* /op is intentionally last (see comment above); hidden once authenticated */
   { "/op <password>",                "Gain SERVER ADMIN status",                   NULL,                     can_see_op_help, HELP_SECTION_GENERAL },
@@ -2299,21 +2317,23 @@ void net_connected(struct net_t *n, char *buf)
                     valid_param=2;
                     if (passed_level(n,game.command_help))
                       {
-                        char help_is_chanconfig_section_shown;
-                        char help_is_admin_section_shown;
+                        char help_section_header_shown[5];
                         int help_i;
+                        int help_section;
                         char help_can_use;
 
                         tprintf(n->sock,"pline 0 %c%cHELP - Server Commands - Tetrinet X Modern - v%s.%s\xff", BOLD, BLACK, TETVERSION, SERVERBUILD);
 
-                        help_is_chanconfig_section_shown = 0;
-                        help_is_admin_section_shown = 0;
+                        for (help_i=0; help_i<5; help_i++)
+                          help_section_header_shown[help_i] = 0;
                         for (help_i=0; help_table[help_i].usage != NULL; help_i++)
                           {
-                            /* The whole Admin Commands section is reserved for
+                            help_section = help_table[help_i].section;
+
+                            /* Every admin-tier section is reserved for
                                authenticated admins, whatever the individual
                                command_* levels in game.conf are set to. */
-                            if (help_table[help_i].section == HELP_SECTION_ADMIN && !passed_level(n,LEVEL_AUTHOP))
+                            if (help_section >= HELP_SECTION_ADMIN && !passed_level(n,LEVEL_AUTHOP))
                               continue;
 
                             if (help_table[help_i].custom_check != NULL)
@@ -2325,17 +2345,11 @@ void net_connected(struct net_t *n, char *buf)
 
                             if (!help_can_use) continue;
 
-                            if (help_table[help_i].section == HELP_SECTION_CHANCONFIG && !help_is_chanconfig_section_shown)
+                            if ( (help_section != HELP_SECTION_GENERAL) && !help_section_header_shown[help_section] )
                               {
                                 tprintf(n->sock,"pline 0 \xff"); /* blank spacer line */
-                                tprintf(n->sock,"pline 0 %c%c--- Channel Configuration ---\xff", BOLD, BLACK);
-                                help_is_chanconfig_section_shown = 1;
-                              }
-                            if (help_table[help_i].section == HELP_SECTION_ADMIN && !help_is_admin_section_shown)
-                              {
-                                tprintf(n->sock,"pline 0 \xff"); /* blank spacer line */
-                                tprintf(n->sock,"pline 0 %c%c--- Admin Commands ---\xff", BOLD, BLACK);
-                                help_is_admin_section_shown = 1;
+                                tprintf(n->sock,"pline 0 %c%c%s\xff", BOLD, BLACK, help_section_headers[help_section]);
+                                help_section_header_shown[help_section] = 1;
                               }
 
                             tprintf(n->sock,"pline 0   %c%s\xff", RED, help_table[help_i].usage);

@@ -111,10 +111,13 @@ Restricted nicknames (admin-account nicks must authenticate):
 - [ ] As a non-admin (or chanop-only) player, run `/password x`.
       **Expected:** "You do NOT have access to that command!", and
       `/password` does not appear in that player's `/help`.
-- [ ] Confirm `/help` as an authenticated admin: blank line + bold
-      `--- Admin Commands ---` header (same style as Channel
-      Configuration), `/password` listed there, and NO `/op` entry
-      (it only shows for players who haven't authenticated).
+- [ ] Confirm `/help` as an authenticated admin: three admin sections,
+      each with a blank line + bold header (same style as Channel
+      Configuration) — `--- Admin Commands ---` (`/ban`, `/unban`,
+      `/banlist`, `/password`), `--- Channel Admin Commands ---`
+      (`/priority`, `/persistant`, `/save`) and
+      `--- Server Admin Commands ---` (`/reset`, `/clear`) — and NO
+      `/op` entry (it only shows for players who haven't authenticated).
 
 Then multi-admin: stop the server, edit `game.secure` to:
 
