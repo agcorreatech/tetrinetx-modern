@@ -1025,7 +1025,13 @@ void net_connected(struct net_t *n, char *buf)
                    and disconnects them for real (unlike /kick, which only
                    redirects to the lobby -- a ban means they can't reconnect
                    at all until /unban'ed). */
-                if ( !strncasecmp(MSG, "/ban", 4) && (game.command_ban>0) )
+                /* Boundary check ("ban"[4] must be end-of-string or a
+                   space): without it, "/banlist" also starts with "/ban"
+                   and would trigger THIS handler too, dumping a spurious
+                   "Usage: /ban <playernumber> [reason]" alongside the
+                   actual banlist output. Same class of bug as /who vs
+                   /whois above. */
+                if ( !strncasecmp(MSG, "/ban", 4) && (MSG[4]=='\0' || MSG[4]==' ') && (game.command_ban>0) )
                   {
                     valid_param=2;
                     if ( passed_level(n,game.command_ban) )
@@ -1166,10 +1172,15 @@ void net_connected(struct net_t *n, char *buf)
                                   {
                                     found_whois=1;
 
+                                    /* Labels are left-padded to a fixed width (instead of a
+                                       single '\t' after each, which lands at wildly different
+                                       columns depending on the label's own length) so every
+                                       value lines up in the same column regardless of label
+                                       length -- "Client version:" is the longest at 16 chars. */
                                     tprintf(n->sock,"pline 0 %cWhois: %s\xff", NAVY, nsock->nick);
-                                    tprintf(n->sock,"pline 0   %cTeam:\t%s\xff", BLACK, nsock->team);
-                                    tprintf(n->sock,"pline 0   %cChannel:\t#%s\xff", BLACK, nsock->channel->name);
-                                    tprintf(n->sock,"pline 0   %cSlot:\t%d\xff", BLACK, nsock->gameslot);
+                                    tprintf(n->sock,"pline 0   %c%-17s%s\xff", BLACK, "Team:", nsock->team);
+                                    tprintf(n->sock,"pline 0   %c%-17s#%s\xff", BLACK, "Channel:", nsock->channel->name);
+                                    tprintf(n->sock,"pline 0   %c%-17s%d\xff", BLACK, "Slot:", nsock->gameslot);
 
                                     switch (nsock->status)
                                       {
@@ -1177,15 +1188,15 @@ void net_connected(struct net_t *n, char *buf)
                                         case STAT_LOST:     statusdesc="Lost (waiting for game to end)"; break;
                                         default:            statusdesc="Not playing"; break;
                                       }
-                                    tprintf(n->sock,"pline 0   %cStatus:\t%s\xff", BLACK, statusdesc);
+                                    tprintf(n->sock,"pline 0   %c%-17s%s\xff", BLACK, "Status:", statusdesc);
 
                                     if (nsock->status==STAT_PLAYING)
-                                      tprintf(n->sock,"pline 0   %cLevel:\t%d\xff", BLACK, nsock->level);
+                                      tprintf(n->sock,"pline 0   %c%-17s%d\xff", BLACK, "Level:", nsock->level);
 
-                                    tprintf(n->sock,"pline 0   %cClient version:\t%s\xff", BLACK, nsock->version);
+                                    tprintf(n->sock,"pline 0   %c%-17s%s\xff", BLACK, "Client version:", nsock->version);
 
                                     if (passed_level(n,LEVEL_AUTHOP))
-                                      tprintf(n->sock,"pline 0   %cHost/IP:\t%s\xff", BLACK, nsock->host);
+                                      tprintf(n->sock,"pline 0   %c%-17s%s\xff", BLACK, "Host/IP:", nsock->host);
                                   }
                                 nsock=nsock->next;
                               }
@@ -1490,7 +1501,11 @@ void net_connected(struct net_t *n, char *buf)
                   }
                   
                 /* Who is online */
-                if ( !strncasecmp(MSG, "/who", 4) && (game.command_who>0))
+                /* Boundary check ("who"[4] must be end-of-string or a
+                   space): without it, "/whois <nick>" also starts with
+                   "/who" and would trigger THIS handler too, dumping an
+                   unwanted full player list right after the whois info. */
+                if ( !strncasecmp(MSG, "/who", 4) && (MSG[4]=='\0' || MSG[4]==' ') && (game.command_who>0))
                   {
                     valid_param=2;
                     if ( passed_level(n,game.command_who) )
@@ -2749,6 +2764,27 @@ void net_waitingforteam(struct net_t *n, char *buf)
     lvprintf(2,"#%s-%s New connection\n", n->channel->name,n->nick);
   }
 
+/* Named colours a game.motd line can request via a leading "[NAME]" tag
+   (see read_motd() below). Names match the #define's in main.h. */
+struct motd_colour_t { const char *name; int code; };
+static const struct motd_colour_t motd_colours[] = {
+  { "BLACK",    BLACK },
+  { "DARKGRAY", DARKGRAY },
+  { "SILVER",   SILVER },
+  { "NAVY",     NAVY },
+  { "BLUE",     BLUE },
+  { "CYAN",     CYAN },
+  { "GREEN",    GREEN },
+  { "NEON",     NEON },
+  { "TEAL",     TEAL },
+  { "BROWN",    BROWN },
+  { "RED",      RED },
+  { "MAGENTA",  MAGENTA },
+  { "VIOLET",   VIOLET },
+  { "YELLOW",   YELLOW },
+  { "WHITE",    WHITE },
+};
+
 /* Read the MOTD file */
 void read_motd(struct net_t *n)
 {
@@ -2756,32 +2792,80 @@ void read_motd(struct net_t *n)
   char motd[1024];
 
   file_in = fopen(FILE_MOTD,"r");
- 
+
   /* File exists, so read it */
   if (file_in != NULL)
   {
-    while (!feof(file_in))
+    /* Blank line before the MOTD content. Sent from code, not as a blank
+       line in game.motd itself: an empty line there would fail to match
+       "%[^\n]" (it requires at least one character), silently ending the
+       read loop right there and skipping everything after it. */
+    tprintf(n->sock,"pline 0 \xff");
+
+    /* BUGFIX: this used to loop on "!feof(file_in)", which only becomes
+       true AFTER a read attempt has already run past the last line -- so
+       every call did one extra, guaranteed-to-fail fscanf() beyond the
+       real content, and that ordinary end-of-file was (wrongly) treated
+       as a fatal I/O error. fatal() kills every connected socket and
+       exit()s the WHOLE server process, so this crashed the entire
+       server on every single client connection (any connection that got
+       far enough to be sent the MOTD), not just the one being served.
+       Looping on the fscanf() result itself avoids the spurious extra
+       iteration entirely. */
+    while (fscanf(file_in,"%1023[^\n]\n", motd) == 1)
     {
-      
-      if(fscanf(file_in,"%1023[^\n]\n", motd) != 1)
+      char *text;
+      int colour, mlen, i;
+
+      /* Strip a trailing '\r' (game.motd saved/edited with CRLF line
+         endings): "%[^\n]" stops at '\n' but includes a preceding '\r'
+         as an ordinary character, which would otherwise be sent
+         verbatim, embedded in the "pline" packet right before its
+         terminating '\xff'. */
+      mlen = strlen(motd);
+      if (mlen>0 && motd[mlen-1]=='\r') motd[mlen-1]='\0';
+
+      /* Optional per-line colour: a leading "[NAME]" tag (NAME one of
+         motd_colours[] above) picks the colour for that line and is
+         stripped before sending; anything else -- no tag, or an
+         unrecognised name -- falls back to the original plain BLUE,
+         sent exactly as written (keeps old, tag-less motd files working
+         unchanged). */
+      text = motd;
+      colour = BLUE;
+      if (motd[0]=='[')
       {
-        lvprintf(4,"ERROR: Failed to read MOTD file. Check folder permissions or remove the file.\n");
-        fatal("Failed to read MOTD file. Check folder permissions or remove the file.",0);
+        char *close = strchr(motd, ']');
+        if (close != NULL)
+        {
+          *close = '\0';
+          for (i=0; i < (int)(sizeof(motd_colours)/sizeof(motd_colours[0])); i++)
+          {
+            if (!strcasecmp(motd+1, motd_colours[i].name))
+            {
+              colour = motd_colours[i].code;
+              text = close+1;
+              break;
+            }
+          }
+          if (text == motd) *close = ']'; /* not a recognised tag -- restore and send as-is */
+        }
       }
-      else {
-        tprintf(n->sock,"pline 0 %c%c%s\xff", BOLD, BLUE, motd);
-      }
+
+      tprintf(n->sock,"pline 0 %c%c%s\xff", BOLD, colour, text);
     }
-  
+
+    /* Blank line after the MOTD content, mirroring the one before it. */
+    tprintf(n->sock,"pline 0 \xff");
+
     lvprintf(4,"File game.motd read successfully.\n");
+    fclose(file_in);
   }
   else
   {
     lvprintf(4,"ERROR: Failed to read MOTD file. Check folder permissions or remove the file.\n");
     fatal("Failed to read MOTD file. Check folder permissions or remove the file.",0);
   }
-
-  fclose(file_in);
 }
 
 /* Write a new the MOTD file with defaults */
