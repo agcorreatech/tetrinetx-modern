@@ -57,6 +57,7 @@ int securityread(void);
 void init_security(void);
 char check_admin_login(char *nick, char *password);
 char is_admin_nick(char *nick);
+char set_admin_password(char *nick, char *newpass);
 
 /* Ban list (game.ban): IP entries (wildcards supported, same syntax as
    before) and nickname entries, each with a reason/date/admin recorded.

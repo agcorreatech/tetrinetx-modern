@@ -274,6 +274,14 @@ char can_use_kick(struct net_t *n)
     return ( (game.command_kick>0 && passed_level(n,game.command_kick)) || passed_level(n,LEVEL_AUTHOP) );
   }
 
+/* can_see_op_help(n) - /op's /help row: shown while the command is enabled
+   AND the player hasn't authenticated yet -- an already-authenticated admin
+   has no use for it, so their /help omits it. */
+char can_see_op_help(struct net_t *n)
+  {
+    return ( game.command_op>0 && !passed_level(n,LEVEL_AUTHOP) );
+  }
+
 /* can_use_priority(n) - /priority is restricted to authenticated admins
    (LEVEL_AUTHOP), regardless of what command_priority in game.conf says:
    the config value can still DISABLE the command (0) but can no longer
@@ -333,9 +341,10 @@ struct help_entry_t help_table[] = {
   { "/ban <playernumber> [reason]",  "Bans a player's IP and nickname",            &game.command_ban,        NULL, HELP_SECTION_ADMIN },
   { "/unban ip|nick <target>",       "Removes a ban entry",                        &game.command_ban,        NULL, HELP_SECTION_ADMIN },
   { "/banlist",                     "Lists all active bans",                       &game.command_banlist,    NULL, HELP_SECTION_ADMIN },
+  { "/password <new-password>",      "Changes your own admin password",            NULL,                     NULL, HELP_SECTION_ADMIN },
 
-  /* /op is intentionally last (see comment above) */
-  { "/op <password>",                "Gain SERVER ADMIN status",                   &game.command_op,         NULL, HELP_SECTION_GENERAL },
+  /* /op is intentionally last (see comment above); hidden once authenticated */
+  { "/op <password>",                "Gain SERVER ADMIN status",                   NULL,                     can_see_op_help, HELP_SECTION_GENERAL },
 
   { NULL, NULL, NULL, NULL, 0 }
 };
@@ -2208,7 +2217,42 @@ void net_connected(struct net_t *n, char *buf)
                         lvprintf(1,"#%s-%s Failed attempt to gain OP status\n", n->channel->name, n->nick);
                       }
                   }
-            
+
+                /* /password <new-password> - An authenticated admin changes the
+                   password of their OWN account (the one matching their current
+                   nickname) -- there is deliberately no way to touch another
+                   account's password from the partyline. Persisted to
+                   game.secure immediately. */
+                if ( !strncasecmp(MSG, "/password", 9) )
+                  {
+                    valid_param=2;
+                    if (passed_level(n,LEVEL_AUTHOP))
+                      {
+                        P = (strlen(MSG) >= 10) ? MSG+10 : (char *)"";
+                        STRG[0]=0;
+                        sscanf(P, "%80s", STRG);
+
+                        if (STRG[0]==0)
+                          tprintf(n->sock,"pline 0 %cUsage: /password <new-password>\xff",RED);
+                        else if (set_admin_password(n->nick, STRG))
+                          {
+                            securitywrite();
+                            if ((int)strlen(STRG) > PASSLEN-1)
+                              tprintf(n->sock,"pline 0 %cYour admin password has been changed (truncated to %d characters).\xff", GREEN, PASSLEN-1);
+                            else
+                              tprintf(n->sock,"pline 0 %cYour admin password has been changed.\xff", GREEN);
+                            lvprintf(1,"#%s-%s changed their own admin password\n", n->channel->name, n->nick);
+                          }
+                        else
+                          { /* Authenticated but the account is gone (e.g. game.secure
+                               edited/reloaded since the /op) -- nothing to change. */
+                            tprintf(n->sock,"pline 0 %cNo admin account found for your nickname!\xff",RED);
+                          }
+                      }
+                    else
+                      tprintf(n->sock,"pline 0 %cYou do NOT have access to that command!\xff",RED);
+                  }
+
                 /* Winlist. Display the top X people - Suggestion by crazor */
                 if ( !strncasecmp(MSG, "/winlist", 8) && (game.command_winlist>0) )
                   {
@@ -2289,7 +2333,8 @@ void net_connected(struct net_t *n, char *buf)
                               }
                             if (help_table[help_i].section == HELP_SECTION_ADMIN && !help_is_admin_section_shown)
                               {
-                                tprintf(n->sock,"pline 0 %c--- Admin Commands ---\xff", RED);
+                                tprintf(n->sock,"pline 0 \xff"); /* blank spacer line */
+                                tprintf(n->sock,"pline 0 %c%c--- Admin Commands ---\xff", BOLD, BLACK);
                                 help_is_admin_section_shown = 1;
                               }
 

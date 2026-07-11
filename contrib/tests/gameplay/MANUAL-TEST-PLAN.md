@@ -97,6 +97,25 @@ Restricted nicknames (admin-account nicks must authenticate):
       **Expected:** nothing happens (the deadline only arms for
       nicknames registered in `game.secure`).
 
+`/password <new-password>` (admin changes own password only):
+
+- [ ] As an authenticated admin, run `/password newsecret`.
+      **Expected:** "Your admin password has been changed.", the
+      `[<nick>]` block in `game.secure` now has `password=newsecret`,
+      and a fresh `/op newsecret` (new connection) works while the old
+      password fails.
+- [ ] Run `/password` with no argument. **Expected:** usage message.
+- [ ] Run `/password averylongpassword123` (over 11 chars).
+      **Expected:** changed with a "(truncated to 11 characters)" note,
+      and `/op averylongpa` (the first 11 chars) is what works.
+- [ ] As a non-admin (or chanop-only) player, run `/password x`.
+      **Expected:** "You do NOT have access to that command!", and
+      `/password` does not appear in that player's `/help`.
+- [ ] Confirm `/help` as an authenticated admin: blank line + bold
+      `--- Admin Commands ---` header (same style as Channel
+      Configuration), `/password` listed there, and NO `/op` entry
+      (it only shows for players who haven't authenticated).
+
 Then multi-admin: stop the server, edit `game.secure` to:
 
 ```

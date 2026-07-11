@@ -99,6 +99,25 @@ char is_admin_nick(char *nick)
     return 0;
   }
 
+/* set_admin_password(nick, newpass) - Changes the password of the admin
+   account matching this nickname (and ONLY that one -- used by /password,
+   where an authenticated admin may change their own password but nobody
+   else's). Returns 1 on success, 0 if no such account exists. The caller
+   is responsible for persisting with securitywrite(). */
+char set_admin_password(char *nick, char *newpass)
+  {
+    int i;
+
+    for (i=0; i<MAXADMINS; i++)
+      if ( security.adminlist[i].inuse && !strcasecmp(security.adminlist[i].nick, nick) )
+        {
+          strncpy(security.adminlist[i].password, newpass, PASSLEN-1);
+          security.adminlist[i].password[PASSLEN-1]=0;
+          return 1;
+        }
+    return 0;
+  }
+
 /* security_seed_default_admin() - Seeds the built-in default admin account
    ([admin] with password "tetrinetx"), used when game.secure doesn't exist
    yet so a fresh install has a working admin login out of the box. */

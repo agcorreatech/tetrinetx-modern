@@ -160,6 +160,20 @@ Robustness:
   "Corrêa") correctly in that encoding but mangles UTF-8's multi-byte
   sequences.
 
+### New: /password command; /help polish for authenticated admins
+
+- New `/password <new-password>` partyline command: an authenticated
+  admin changes the password of their OWN account (the one matching
+  their current nickname) -- there is deliberately no way to change
+  another account's password. Persisted to `game.secure` immediately;
+  values over the 11-character cap are truncated with a notice.
+- The `--- Admin Commands ---` header in `/help` now gets a blank
+  spacer line before it and is rendered bold black, matching the
+  Channel Configuration section's style.
+- `/help` no longer lists `/op` for an already-authenticated admin
+  (nothing left for them to gain from it); it still shows for everyone
+  else whenever `command_op` is enabled.
+
 ### New: restricted nicknames -- admin-account nicks must authenticate
 
 - Connecting under a nickname that has an admin account in `game.secure`
