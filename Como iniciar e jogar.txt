@@ -1,0 +1,255 @@
+================================================================
+ TetriNET X Modern -- Como iniciar e jogar (guia para iniciantes)
+================================================================
+
+TetriNET é Tetris multiplayer: até 6 jogadores batalham entre si
+pela rede. Limpar linhas manda ataques (e defesas) para os outros
+jogadores. Ganha o último jogador que sobrar em pé.
+
+Para jogar você precisa de duas coisas:
+
+  1. O SERVIDOR  (este projeto) -- roda em um lugar só, e todo
+     mundo se conecta nele.
+  2. O CLIENT    (o jogo em si) -- cada jogador roda um no
+     próprio computador.
+
+Este guia cobre os dois, passo a passo.
+
+
+----------------------------------------------------------------
+ PARTE 1 -- Iniciando o servidor
+----------------------------------------------------------------
+
+Escolha UMA das duas opções abaixo. Docker é a mais fácil se
+você tem o Docker Desktop instalado (funciona em Windows, Mac e
+Linux). A opção Linux direto precisa de uma máquina Linux (ou
+WSL) com gcc.
+
+O servidor escuta na porta TCP 31457. É a única porta que os
+jogadores precisam alcançar.
+
+
+OPÇÃO A -- Com Docker (mais fácil)
+----------------------------------
+
+Requisitos: Docker instalado e rodando
+            (https://www.docker.com/products/docker-desktop/)
+
+1. Abra um terminal na pasta raiz deste repositório
+   (a pasta onde está este arquivo .txt).
+
+2. Construa e inicie o servidor:
+
+     docker compose -f contrib/docker/docker-compose.yml up -d --build
+
+   Na primeira vez isso demora alguns minutos (baixa uma imagem
+   base e compila o servidor). Depois disso é instantâneo.
+
+3. Confira se está rodando:
+
+     docker compose -f contrib/docker/docker-compose.yml logs
+
+   Você deve ver uma linha como:
+
+     BOOT: Daemon running (pid ...). Startup complete.
+
+Pronto. O servidor está no ar na porta 31457 e reinicia sozinho
+com o Docker. Configuração e placar ficam guardados em um volume
+do Docker, então sobrevivem a reinícios.
+
+Para parar o servidor depois:
+
+     docker compose -f contrib/docker/docker-compose.yml down
+
+
+OPÇÃO B -- Direto no Linux (sem Docker)
+---------------------------------------
+
+Requisitos: uma máquina Linux (ou WSL no Windows) com gcc
+            instalado (no Ubuntu/Debian: sudo apt install
+            build-essential)
+
+1. Abra um terminal na pasta raiz deste repositório.
+
+2. Compile o servidor (um comando só, leva poucos segundos):
+
+     cd src && sed -i -e 's/\r$//' compile.linux && bash compile.linux && cd ..
+
+   Isso cria o programa  bin/tetrix-modern.linux
+
+3. Crie uma pasta para o servidor morar e inicie-o lá dentro
+   (o servidor grava a configuração, o placar e o log na pasta
+   DE ONDE ele é iniciado):
+
+     mkdir -p ~/tetrinetx-server
+     cp bin/tetrix-modern.linux bin/game.conf bin/game.motd ~/tetrinetx-server/
+     cd ~/tetrinetx-server
+     ./tetrix-modern.linux
+
+   O servidor imprime as etapas de inicialização e depois vai
+   sozinho para segundo plano (ele "daemoniza"). A partir daí,
+   ele registra tudo no arquivo  game.log  dessa pasta.
+
+4. Confira se está rodando:
+
+     cat game.log
+
+   Você deve ver:  Daemon running (pid ...) ... Startup complete.
+
+Para parar o servidor depois:
+
+     kill $(cat ~/tetrinetx-server/game.pid)
+
+
+----------------------------------------------------------------
+ PARTE 2 -- Iniciando o jogo (o client)
+----------------------------------------------------------------
+
+Um client TetriNET 1.13 vem incluído neste repositório, na pasta
+tetrinet_windows_client_v1.13/
+
+1. Descompacte o  tetrinet_v1.13_windows_by_St0rmCat.zip  em
+   qualquer pasta do computador do jogador (cada jogador faz
+   isso na sua própria máquina).
+
+2. Execute o  TETRINET.EXE
+
+   - No Windows: é só dar dois cliques. É um programa bem antigo
+     (1997!), mas ainda roda numa boa no Windows moderno.
+   - No Linux ou Mac: rode com o Wine:  wine TETRINET.EXE
+
+3. A janela do TetriNET que abre tem uma parte de "client"
+   (para ENTRAR em um servidor -- a que você vai usar) e uma
+   parte de "server" (para HOSPEDAR -- ignore-a, este projeto
+   substitui o servidor embutido do client, que só funcionava
+   bem nas redes locais dos anos 90).
+
+
+----------------------------------------------------------------
+ PARTE 3 -- Conectando no servidor
+----------------------------------------------------------------
+
+Na janela do TETRINET.EXE:
+
+1. Na caixa de endereço do servidor (com o rótulo "TetriNET
+   Server"), digite o endereço da máquina onde o servidor está
+   rodando:
+
+   - Mesmo computador do client?      digite  127.0.0.1
+   - Outro computador na sua rede?    digite o IP local dele,
+                                      ex.:  192.168.0.10
+   - Pela internet?                   digite o IP público do
+                                      servidor (quem hospeda
+                                      precisa redirecionar a
+                                      porta TCP 31457 no
+                                      roteador)
+
+   Não existe caixa de porta -- o client sempre usa a porta
+   31457, que é exatamente a porta em que este servidor escuta.
+
+2. Digite um apelido na caixa Nickname. Cada jogador precisa
+   usar um apelido diferente.
+
+3. (Opcional) Digite um nome de time na caixa Team. Jogadores
+   com o mesmo nome de time jogam juntos -- não se atacam e
+   vencem juntos.
+
+4. Aperte  "Connect".
+
+Você vai cair na tela Partyline: uma sala de bate-papo onde dá
+para ver quem está online e conversar enquanto espera o jogo
+começar. O servidor te recebe com uma mensagem de boas-vindas.
+
+
+----------------------------------------------------------------
+ PARTE 4 -- Jogando
+----------------------------------------------------------------
+
+Começando uma partida
+---------------------
+
+O PRIMEIRO jogador que se conectou ao servidor é o "moderador"
+(repare no * ao lado de um apelido na lista de jogadores). Só o
+moderador pode iniciar, parar e pausar partidas -- pelos botões
+da tela Partyline ("Start New Game", "Pause").
+
+Ou seja: todo mundo conecta, conversa na partyline e, quando
+todos estiverem prontos, o moderador aperta  "Start New Game".
+
+Controles (teclas padrão)
+-------------------------
+
+  Setas ESQUERDA/DIREITA   movem a peça que está caindo
+  Seta PARA CIMA           gira a peça
+  CONTROL                  gira para o outro lado
+  Seta PARA BAIXO          faz a peça cair mais rápido
+  ESPAÇO                   derruba a peça de uma vez
+  T                        conversa durante o jogo (ESC esconde
+                           a caixa)
+  D                        descarta seu bloco especial atual
+  1 2 3 4 5 6              usa seu bloco especial naquele
+                           jogador (cada campo na tela mostra o
+                           número dele)
+
+Dá para ver ou trocar as teclas no client, em "Misc. Settings".
+
+Blocos especiais (a parte divertida!)
+-------------------------------------
+
+De vez em quando uma peça vem com uma bolinha colorida com uma
+letra. Limpe a linha em que ela está e esse bloco especial vai
+para o seu INVENTÁRIO (a barra embaixo do seu campo). Você só
+pode usar o bloco que está dentro da caixinha vermelha; aperte o
+número de um jogador (1-6) para usá-lo nele.
+
+  Blocos de ATAQUE -- use nos ADVERSÁRIOS (no número deles):
+    A  adiciona uma linha de entulho no campo dele
+    R  remove 10 blocos aleatórios do campo dele (pode ajudar ou
+       atrapalhar!)
+    S  troca o seu campo com o dele (ótimo quando você está
+       perdendo)
+    Q  sacode o campo dele, deslocando as linhas aleatoriamente
+       para a esquerda/direita
+    O  bomba: explode ao redor dos blocos 'o' no campo dele
+
+  Blocos de DEFESA -- use em VOCÊ MESMO (no seu próprio número):
+    C  limpa a sua linha de baixo
+    N  limpa o seu campo inteiro (recomeço do zero)
+    B  remove os blocos especiais do seu campo
+    G  gravidade: puxa todos os seus blocos para baixo, fechando
+       os buracos
+
+Vencendo
+--------
+
+Você perde quando a sua pilha alcança o topo do campo. O último
+jogador (ou time) vivo vence a rodada e ganha 3 pontos no
+placar; o penúltimo a perder ganha 2; o antepenúltimo ganha 1.
+O placar é mantido pelo servidor entre as partidas -- veja a
+tela Winlist.
+
+
+----------------------------------------------------------------
+ Resolvendo problemas
+----------------------------------------------------------------
+
+"Não conecta"
+  - O servidor está mesmo rodando?  Docker:  docker compose -f
+    contrib/docker/docker-compose.yml ps   /  Linux:  cat game.log
+  - Firewall: a porta TCP 31457 precisa estar liberada na
+    máquina do servidor (e redirecionada no roteador para jogar
+    pela internet).
+  - Teste a partir da máquina do jogador:  telnet IP_DO_SERVIDOR 31457
+    (se a conexão abrir e ficar aberta, o servidor está
+    alcançável -- feche e use o client do jogo).
+
+"Nickname already exists on server!"
+  - Já tem alguém conectado com esse apelido. Cada jogador
+    precisa de um apelido único.
+
+Comandos do servidor
+  - Na partyline, digite  /help  para ver os comandos de chat
+    disponíveis para você (listar jogadores, mudar o tópico,
+    etc.).
+
+Divirta-se!

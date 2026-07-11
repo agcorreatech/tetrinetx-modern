@@ -1,0 +1,244 @@
+================================================================
+ TetriNET X Modern -- How to start and play (beginner's guide)
+================================================================
+
+TetriNET is multiplayer Tetris: up to 6 players battle each other
+over the network. Clearing lines sends attacks (and defenses) to
+the other players. The last player standing wins.
+
+To play you need two things:
+
+  1. The SERVER  (this project) -- runs in one place, everyone
+     connects to it.
+  2. The CLIENT  (the game itself) -- each player runs one on
+     their own computer.
+
+This guide covers both, step by step.
+
+
+----------------------------------------------------------------
+ PART 1 -- Starting the server
+----------------------------------------------------------------
+
+Pick ONE of the two options below. Docker is the easiest if you
+have Docker Desktop installed (works on Windows, Mac and Linux).
+The plain-Linux option needs a Linux machine (or WSL) with gcc.
+
+The server listens on TCP port 31457. That is the only port the
+players need to reach.
+
+
+OPTION A -- With Docker (easiest)
+---------------------------------
+
+Requirements: Docker installed and running
+              (https://www.docker.com/products/docker-desktop/)
+
+1. Open a terminal in the root folder of this repository
+   (the folder that contains this .txt file).
+
+2. Build and start the server:
+
+     docker compose -f contrib/docker/docker-compose.yml up -d --build
+
+   The first time this takes a few minutes (it downloads a base
+   image and compiles the server). After that it is instant.
+
+3. Check that it is running:
+
+     docker compose -f contrib/docker/docker-compose.yml logs
+
+   You should see a line like:
+
+     BOOT: Daemon running (pid ...). Startup complete.
+
+That's it. The server is up on port 31457 and restarts
+automatically with Docker. Configuration and scores are kept in
+a Docker volume, so they survive restarts.
+
+To stop the server later:
+
+     docker compose -f contrib/docker/docker-compose.yml down
+
+
+OPTION B -- Directly on Linux (no Docker)
+-----------------------------------------
+
+Requirements: a Linux machine (or WSL on Windows) with gcc
+              installed (on Ubuntu/Debian: sudo apt install
+              build-essential)
+
+1. Open a terminal in the root folder of this repository.
+
+2. Compile the server (one command, takes a few seconds):
+
+     cd src && sed -i -e 's/\r$//' compile.linux && bash compile.linux && cd ..
+
+   This creates the program file  bin/tetrix-modern.linux
+
+3. Create a folder for the server to live in and start it there
+   (the server writes its config, scores and log files in the
+   folder you start it FROM):
+
+     mkdir -p ~/tetrinetx-server
+     cp bin/tetrix-modern.linux bin/game.conf bin/game.motd ~/tetrinetx-server/
+     cd ~/tetrinetx-server
+     ./tetrix-modern.linux
+
+   The server prints its startup steps and then goes to the
+   background by itself (it "daemonizes"). From then on it logs
+   to the file  game.log  in that folder.
+
+4. Check that it is running:
+
+     cat game.log
+
+   You should see:  Daemon running (pid ...) ... Startup complete.
+
+To stop the server later:
+
+     kill $(cat ~/tetrinetx-server/game.pid)
+
+
+----------------------------------------------------------------
+ PART 2 -- Starting the game (the client)
+----------------------------------------------------------------
+
+A TetriNET 1.13 client is included in this repository, in the
+folder  tetrinet_windows_client_v1.13/
+
+1. Unzip  tetrinet_v1.13_windows_by_St0rmCat.zip  into any
+   folder on the player's computer (each player does this on
+   their own machine).
+
+2. Run  TETRINET.EXE
+
+   - On Windows: just double-click it. It is a very old program
+     (1997!) but still runs fine on modern Windows.
+   - On Linux or Mac: run it with Wine:  wine TETRINET.EXE
+
+3. The TetriNET window that opens has both a "client" part
+   (for JOINING a server -- the one you will use) and a "server"
+   part (for HOSTING -- ignore it, this project replaces the
+   client's built-in server, which only worked well on 90s LANs).
+
+
+----------------------------------------------------------------
+ PART 3 -- Connecting to the server
+----------------------------------------------------------------
+
+In the TETRINET.EXE window:
+
+1. In the server address box (labelled "TetriNET Server"), type
+   the address of the machine where the server is running:
+
+   - Same computer as the client?      type  127.0.0.1
+   - Another computer on your LAN?     type its local IP,
+                                       e.g.  192.168.0.10
+   - Over the internet?                type the server's public
+                                       IP (the person hosting
+                                       must forward TCP port
+                                       31457 on their router)
+
+   There is no port box -- the client always uses port 31457,
+   which is exactly the port this server listens on.
+
+2. Type a nickname in the Nickname box. Each player must use a
+   different nickname.
+
+3. (Optional) Type a team name in the Team box. Players with the
+   same team name play as a team -- they don't hurt each other
+   and win together.
+
+4. Press  "Connect".
+
+You will land on the Partyline screen: a chat room where you can
+see who is online and talk while waiting for the game to start.
+The server greets you with a welcome message.
+
+
+----------------------------------------------------------------
+ PART 4 -- Playing
+----------------------------------------------------------------
+
+Starting a game
+---------------
+
+The FIRST player who connected to the server is the "moderator"
+(look for the * next to a nickname in the player list). Only the
+moderator can start, stop and pause games -- using the buttons
+on the Partyline screen ("Start New Game", "Pause").
+
+So: everyone connects, chats on the partyline, and when everyone
+is ready, the moderator presses  "Start New Game".
+
+Controls (default keys)
+-----------------------
+
+  LEFT / RIGHT arrows   move the falling piece
+  UP arrow              rotate the piece
+  CONTROL               rotate the other way
+  DOWN arrow            make the piece fall faster
+  SPACE                 drop the piece instantly
+  T                     chat while playing (ESC hides the box)
+  D                     discard your current special block
+  1 2 3 4 5 6           use your special block on that player
+                        (each field on screen shows its number)
+
+You can view or change the keys in the client under
+"Misc. Settings".
+
+Special blocks (the fun part!)
+------------------------------
+
+Sometimes a piece contains a colored ball with a letter. Clear
+the line it is in and that special block goes to your INVENTORY
+(the bar at the bottom of your field). You can only use the
+block inside the red box; press a player's number (1-6) to use
+it on them.
+
+  ATTACK blocks -- use them on OPPONENTS (their number):
+    A  adds a junk line to their field
+    R  removes 10 random blocks from their field (can be good or
+       bad for them!)
+    S  switches your field with theirs (great when you're losing)
+    Q  shakes their field, shifting lines randomly left/right
+    O  block bomb: explodes around any 'o' blocks on their field
+
+  DEFENSE blocks -- use them on YOURSELF (your own number):
+    C  clears your bottom line
+    N  wipes your whole field clean (fresh start)
+    B  removes special blocks from your field
+    G  gravity: pulls all your blocks down, closing the gaps
+
+Winning
+-------
+
+You lose when your stack reaches the top of the field. The last
+player (or team) alive wins the round and gets 3 points on the
+winlist; second-to-last gets 2; third-to-last gets 1. Scores are
+kept by the server between games -- check the Winlist screen.
+
+
+----------------------------------------------------------------
+ Troubleshooting
+----------------------------------------------------------------
+
+"Cannot connect"
+  - Is the server really running?  Docker:  docker compose -f
+    contrib/docker/docker-compose.yml ps   /  Linux:  cat game.log
+  - Firewall: TCP port 31457 must be allowed on the server
+    machine (and forwarded on the router for internet play).
+  - Test from the player's machine:  telnet SERVER_IP 31457
+    (a connection that opens and stays open means the server is
+    reachable -- close it and use the game client).
+
+"Nickname already exists on server!"
+  - Someone is already connected with that nickname. Every
+    player needs a unique one.
+
+Server commands
+  - On the partyline, type  /help  to see the chat commands
+    available to you (list players, change topic, etc.).
+
+Have fun!

@@ -160,6 +160,17 @@ Robustness:
   "Corrêa") correctly in that encoding but mangles UTF-8's multi-byte
   sequences.
 
+### New: beginner's guides (English + Brazilian Portuguese)
+
+- Added `How to start and play.txt` and `Como iniciar e jogar.txt` at
+  the repo root: step-by-step beginner documentation covering running
+  the server (Docker compose or the Linux binary directly), running the
+  bundled TetriNET 1.13 client (`TETRINET.EXE`, natively or via Wine),
+  connecting (address/nickname/team, port 31457), and playing (moderator
+  role, default keys, special blocks, winlist scoring, troubleshooting).
+  Game-rule and key-binding details were sourced from the original
+  `TETRINET.TXT` and `tetrinet.ini` inside the bundled client zip.
+
 ### Build: committed binary updated
 
 - `bin/tetrix-modern.linux` rebuilt from the current source so the
