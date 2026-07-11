@@ -90,7 +90,10 @@ char *s; int len;
     {
       strncpy(s,"localhost",len-1); s[len-1]='\0';
     }
-  printf("Warning: could not determine a fully qualified hostname (no FQDN/DNS configured for this machine); using '%s' instead.\n", s);
+  /* Log-only: not printed to stdout, so it doesn't clutter the terminal
+     (or `docker logs`/systemd journal) on every normal startup -- this
+     is expected on any host without a configured FQDN, not an error.
+     Still recorded in game.log (if game.verbose>=2) for troubleshooting. */
   lvprintf(2,"Warning: could not determine a fully qualified hostname; using '%s' instead.\n", s);
 }
 
