@@ -9,6 +9,12 @@ commit directly to `develop` or `main`. If `claude` doesn't exist yet,
 create it from `develop`. Check out/create it at the start of a session
 before making changes.
 
+Whenever you make a commit, also update `CHANGELOG.md` with a summary of
+what changed, in the same commit. Add it under the current unreleased
+entry at the top of the file, following the existing `## Release NN -
+DD/Mon/YYYY` + `### Topic` + bullet-list structure already used
+throughout the file.
+
 ## What this is
 
 TetriNET X Modern is a modernized fork of `tetrinetx` (the classic GNU
