@@ -4,6 +4,11 @@ Maintainer / Developer: Alexandro G. Corrêa <alex.linux@gmail.com>
 
 ## Release 05 - 11/Jul/2026
 
+### Repo housekeeping
+
+- `CLAUDE.md` (guidance for Claude Code sessions working in this repo)
+  added to `.gitignore` -- kept locally, not tracked/shared via git.
+
 ### Startup: quieter FQDN-fallback warning
 
 - `getmyhostname()` (`src/net.c`) no longer `printf()`s its "could not
