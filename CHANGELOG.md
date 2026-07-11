@@ -160,6 +160,16 @@ Robustness:
   "Corrêa") correctly in that encoding but mangles UTF-8's multi-byte
   sequences.
 
+### Changed: Docker image no longer ships config files
+
+- With all defaults now embedded in the binary (entry below), the Docker
+  image stopped carrying the `/opt/tetrinetx/defaults/` copies of
+  `game.conf`/`game.motd`, and `entrypoint.sh` no longer copies them
+  into `/data` on first run -- the binary itself generates `game.conf`,
+  `game.motd` and `game.secure` on first boot (and never overwrites
+  existing files, so volume edits still persist across restarts and
+  rebuilds). `contrib/docker/README.md` updated accordingly.
+
 ### Changed: all default files fully embedded in the binary; maxchannels=99
 
 - Starting the binary in an empty directory now regenerates ALL of

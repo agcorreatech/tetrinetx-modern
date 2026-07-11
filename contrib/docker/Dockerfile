@@ -45,13 +45,14 @@ RUN groupadd --system tetrinetx && \
     useradd --system --gid tetrinetx --home-dir /opt/tetrinetx \
             --no-create-home --shell /usr/sbin/nologin tetrinetx
 
-# /opt/tetrinetx = binario + arquivos de configuracao padrao (imagem, somente leitura na pratica)
+# /opt/tetrinetx = binario (imagem, somente leitura na pratica). Os arquivos
+#                  de configuracao padrao (game.conf/game.motd/game.secure)
+#                  NAO sao copiados para a imagem: o proprio binario os gera
+#                  com os padroes embutidos no primeiro boot.
 # /data          = diretorio de trabalho real do servidor, feito para ser montado como volume
 WORKDIR /opt/tetrinetx
 
 COPY --from=build /src/bin/tetrix-modern.linux ./tetrix-modern.linux
-COPY bin/game.conf ./defaults/game.conf
-COPY bin/game.motd ./defaults/game.motd
 COPY contrib/docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 # Normaliza defensivamente eventuais quebras de linha CRLF no entrypoint.sh

@@ -130,15 +130,18 @@ O `entrypoint.sh` contorna isso:
 
 ## Sobre o diretório de dados (`/data`) vs. a imagem (`/opt/tetrinetx`)
 
-- `/opt/tetrinetx` dentro da imagem contém o binário compilado e uma cópia
-  "modelo" de `game.conf`/`game.motd` em `/opt/tetrinetx/defaults/`.
+- `/opt/tetrinetx` dentro da imagem contém apenas o binário compilado.
 - `/data` é o diretório de trabalho real do servidor (onde ele lê/escreve
   `game.conf`, `game.motd`, `game.winlist`, `game.log`, `game.pid`) e é o
   que fica no volume Docker.
-- Na primeira execução, o `entrypoint.sh` copia os arquivos de
-  `defaults/` para `/data` **somente se ainda não existirem lá** — assim,
-  qualquer alteração que você fizer em `/data/game.conf` é preservada entre
-  reinícios e rebuilds da imagem.
+- Na primeira execução, o **próprio binário** gera `game.conf`,
+  `game.motd` e `game.secure` em `/data` com os padrões embutidos nele —
+  e nunca sobrescreve o que já existir lá, então qualquer alteração que
+  você fizer em `/data/game.conf` é preservada entre reinícios e rebuilds
+  da imagem. (Versões antigas da imagem carregavam uma cópia "modelo"
+  desses arquivos em `/opt/tetrinetx/defaults/` e o `entrypoint.sh` os
+  copiava no primeiro boot; isso deixou de ser necessário quando os
+  padrões passaram a ser embutidos no binário.)
 
 ## Zumbis e o `--init`
 

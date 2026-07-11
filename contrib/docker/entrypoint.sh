@@ -28,15 +28,11 @@ BINARY="${APPDIR}/tetrix-modern.linux"
 PIDFILE="${DATADIR}/game.pid"
 LOGFILE="${DATADIR}/game.log"
 
-# Copia os arquivos de configuracao padrao para o diretorio de dados na
-# primeira execucao, sem sobrescrever o que ja existir la (permite editar
-# game.conf/game.motd no volume montado e persistir entre reinicios).
+# Nao e preciso copiar arquivos de configuracao padrao: o proprio binario
+# gera game.conf, game.motd e game.secure com os padroes embutidos quando
+# eles nao existem no diretorio de trabalho (e nunca sobrescreve o que ja
+# existir la, entao edicoes no volume persistem entre reinicios).
 mkdir -p "${DATADIR}"
-for f in game.conf game.motd; do
-  if [[ ! -f "${DATADIR}/${f}" && -f "${APPDIR}/defaults/${f}" ]]; then
-    cp "${APPDIR}/defaults/${f}" "${DATADIR}/${f}"
-  fi
-done
 
 cd "${DATADIR}"
 
