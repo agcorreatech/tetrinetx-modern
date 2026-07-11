@@ -29,7 +29,17 @@ so each section starts from a clean slate unless it says otherwise.
 
 ## 1. Connecting, chat, basics
 
-- [ ] Connect with nickname `alice`. Confirm you land in channel `#tetrinet`.
+- [ ] Connect with nickname `alice`. Confirm you land in channel `#lobby`
+      (default channel, topic "Server Lobby", priority 1 — created
+      automatically together with `#1x1` when `game.conf` defines no
+      channels).
+- [ ] Run `/list`. **Expected:** `#lobby` (priority 1) and `#1x1`
+      (priority 2, max **2** players, topic "Game 1x1") are both listed.
+- [ ] Fill `#lobby` to its 6 players, then connect a 7th client.
+      **Expected:** the 7th player lands in `#1x1` (the next-lowest
+      priority with room). Fill `#1x1` too (2 players) and connect a 9th
+      client — **expected:** a `#lobby1` channel is created automatically
+      and the player lands there.
 - [ ] Connect a second client with nickname `alice` again (same, exact
       spelling). **Expected:** rejected with "Nickname already exists on
       server!" — confirms nicknames are unique server-wide (this is what
@@ -60,7 +70,20 @@ so each section starts from a clean slate unless it says otherwise.
 
 ## 3. `/op` (multi-admin, nickname-implicit auth)
 
-Stop the server, edit `game.secure` to:
+Default account first — on a **fresh** server (no `game.secure` yet):
+
+- [ ] Confirm the generated `game.secure` contains the default account
+      `[admin]` with `password=tetrinetx`, plus header comments explaining
+      the `/op` nickname-implicit validation.
+- [ ] Confirm the startup output/`game.log` shows the `WARNING` lines
+      about the default admin account still being present, recommending
+      changing both the account name and the password.
+- [ ] Connect with nickname `admin`, run `/op tetrinetx`. **Expected:**
+      "Your security level is now: AUTHENTICATED OP".
+- [ ] Edit `game.secure` to rename the account/change the password,
+      restart, and confirm the startup `WARNING` is gone.
+
+Then multi-admin: stop the server, edit `game.secure` to:
 
 ```
 [alice]
@@ -143,36 +166,31 @@ channel:
 As the channel's chanop (OP by position — no `/op` needed for
 this one, since `/kick` stays at its original chanop-level default):
 
-- [ ] With `bob` connected in `#tetrinet`, run `/kick <bob's gameslot>`.
+- [ ] With `bob` connected in `#lobby`, run `/kick <bob's gameslot>`.
       **Expected:** bob is **not disconnected** — his client receives
-      messages that he was kicked from `#tetrinet` and cannot rejoin for
-      5 minutes, and is moved to `#Lobby`. Confirm `bob`'s client shows
-      him now in `#Lobby` (via `/who` or the client's own channel
+      messages that he was kicked from `#lobby` and cannot rejoin for
+      5 minutes, and is moved to `#lobby1` (created automatically, since
+      he was kicked from the lobby itself). Confirm `bob`'s client shows
+      him now in `#lobby1` (via `/who` or the client's own channel
       display), still connected and able to chat/join other channels.
-- [ ] As `bob` (still connected, now in `#Lobby`), try `/join #tetrinet`
+- [ ] As `bob` (still connected, now in `#lobby1`), try `/join #lobby`
       (the room he was just kicked from). **Expected:** rejected with a
       message saying he can't rejoin yet, with roughly how long is left.
-- [ ] `/join` any **other** channel (not `#tetrinet`, not `#Lobby`) —
+- [ ] `/join` any **other** channel (not `#lobby`, not `#lobby1`) —
       confirm this succeeds normally (the cooldown only blocks the
       specific room kicked from).
 - [ ] Disconnect `bob` entirely and reconnect with the **same nickname**
-      `bob` before the 5 minutes are up, then try `/join #tetrinet`
+      `bob` before the 5 minutes are up, then try `/join #lobby`
       again. **Expected:** still rejected — the cooldown is keyed by
       nickname, not by connection, so it survives the reconnect.
 - [ ] Wait for the 5 minutes to elapse (or, for a faster test, restart
       the server with a shorter `KICK_COOLDOWN_SECS` temporarily
       recompiled — note cooldowns are in-memory only and don't survive a
       server restart either way), then confirm `bob` can `/join
-      #tetrinet` again normally.
-- [ ] Fill `#Lobby` to `maxplayers`, then kick a player from a different,
-      unrelated room. **Expected:** they land in `#Lobby1` instead
-      (created automatically), not in the full `#Lobby`.
-- [ ] With only `#Lobby` existing, kick a player who is **currently in
-      `#Lobby` itself** (e.g. an chanop of Lobby kicks someone there).
-      **Expected:** the kicked player lands in `#Lobby1` (created
-      automatically) rather than being disconnected or looping back into
-      `#Lobby` — confirms the lobby search correctly excludes the room
-      being kicked from, even when that room *is* the default lobby.
+      #lobby` again normally.
+- [ ] Fill `#lobby` to `maxplayers`, then kick a player from a different,
+      unrelated room. **Expected:** they land in `#lobby1` instead
+      (created automatically), not in the full `#lobby`.
 - [ ] Set `command_kick=0` in `game.conf` (disables `/kick` for
       everyone) and restart. As a normal player who happens to be
       chanop, run `/kick <playernumber>` — **expected:** "You do NOT

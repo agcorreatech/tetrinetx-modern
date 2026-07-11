@@ -61,7 +61,6 @@
 #define MAXPLAYERS 6			/* Maximum number of players allowed */
 #define CHANLEN 16			/* Length of channel names */
 #define IPLEN 16			/* Size of IP */
-#define DEFAULTCHANNEL "tetrinet"	/* Default channel name */
 #define DEFAULTMAXPLAYERS 6		/* Default max players in channel */
 #define DEFAULTPRIORITY 50		/* Default priority */
 #define DESCRIPTIONLEN 31		/* Description */
@@ -222,7 +221,7 @@ struct game_t {
   int command_banlist;		/* Allow /banlist */
 
   int winlist_export_txt;	/* Export the winlist to a plain-text CSV file? */
-  char main_channel_name[CHANLEN+1];	/* Base name of the "lobby" room(s) kicked players are redirected to */
+  char main_channel_name[CHANLEN+1];	/* Base name of the "lobby" room(s): default channel on connect + kick redirect target */
 
   int verbose;			/* Verbosity */
   char pidfile[PIDFILELEN+1];

@@ -160,6 +160,61 @@ Robustness:
   "Corrêa") correctly in that encoding but mangles UTF-8's multi-byte
   sequences.
 
+### New: default channels #lobby + #1x1, lobby overflow, auto-join order
+
+- When `game.conf` defines no `[channel]` blocks, the server now seeds
+  two default rooms at startup: **#lobby** (topic "Server Lobby",
+  priority 1 — where players land on connect) and **#1x1** (max **2**
+  players, topic "Game 1x1", priority 2). Both are persistent presets;
+  on a brand-new install they are also written into the fresh
+  `game.conf`. (Previously no channel existed until the first connection
+  created a non-persistent `#tetrinet`.)
+- **Auto-join priority semantics inverted**: players connecting are now
+  placed in the room with the LOWEST non-zero priority that has space
+  (1 fills first, then 2, ...); priority 0 still means "never
+  auto-join". It used to be highest-value-wins, which would have sent
+  everyone to #1x1 before #lobby. `game.conf` comments and the
+  `/priority` feedback message document the new ordering.
+- **Connect overflow now uses lobby variants**: when every room is full
+  (or priority 0), the connection lands in `lobby1`, `lobby2`, ...
+  (created on demand, same helper the `/kick` redirect uses) instead of
+  the old auto-created `tetrinet2`, `tetrinet3`, ... rooms. "Server is
+  Full!" is only sent once `maxchannels` is exhausted.
+- `main_channel_name` default renamed `Lobby` -> `lobby` (matching is
+  case-insensitive, so existing setups keep working).
+- **Crash fix (latent, pre-existing)**: preset channels created by
+  `gameread()` from `game.conf` never initialised `chan->net`, leaving a
+  garbage player-list pointer — the first connection to touch such a
+  channel (`numplayers()` walks that list) could crash the server. Went
+  unnoticed because the stock `game.conf` had no channels; the new
+  default channels made it crash reliably on the second boot.
+
+### New: game.secure ships a default admin account, with a loud warning
+
+- A fresh `game.secure` now contains a working default account:
+  `[admin]` with password `tetrinetx`, so a new install has admin access
+  out of the box (`/op tetrinetx` connected under the nickname `admin`).
+- The file's header comments were rewritten to document how `/op`
+  validation actually works (nickname-implicit username, both must
+  match, passwords case-sensitive and capped at 11 chars) and to tell
+  the owner to change the default account.
+- While the default `[admin]`/`tetrinetx` pair is still present, every
+  startup logs a WARNING (also echoed to stdout pre-daemonization)
+  recommending changing BOTH the account name and the password.
+- If `game.secure` vanishes mid-run, the `/op` handler recreates it the
+  same way boot does — default account included.
+
+### Test-suite updates for the new defaults
+
+- `config-migration`: expects `main_channel_name=lobby`.
+- `query-port`: `listchan` now asserts both `lobby` and `1x1`; the
+  query helper reads until `+OK`/close instead of a single `recv()`
+  (multi-channel replies span several TCP segments) and returns partial
+  data on timeout (`playerquery` has no `+OK` terminator).
+- `MANUAL-TEST-PLAN.md`: updated for `#lobby`/`#1x1`/`#lobby1` and the
+  default-admin checks (warning present on fresh install, gone after
+  changing the credentials).
+
 ### Repo housekeeping: CLAUDE.md actually untracked
 
 - The earlier "CLAUDE.md added to .gitignore" change only added the

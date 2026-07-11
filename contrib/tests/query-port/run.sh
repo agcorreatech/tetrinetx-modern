@@ -46,19 +46,33 @@ cd "${TESTDIR}"
 sleep 1
 
 query() {
-  # query <command> -> prints the raw response (empty on error/timeout)
+  # query <command> -> prints the raw response (empty on error/timeout).
+  # Reads until "+OK" (the reply terminator) or the peer closes: multi-line
+  # replies (e.g. listchan with several channels) can arrive split across
+  # multiple TCP segments, so a single recv() is not enough.
   python3 - "$1" <<'PYEOF'
 import socket, sys
 cmd = sys.argv[1]
+data = b""
 try:
     s = socket.create_connection(("127.0.0.1", 31457), timeout=3)
     s.settimeout(3)
     s.sendall((cmd + "\n").encode())
-    data = s.recv(4096)
-    sys.stdout.write(data.decode(errors="replace"))
+    while b"+OK" not in data:
+        try:
+            chunk = s.recv(4096)
+        except socket.timeout:
+            # not every reply ends in +OK (e.g. playerquery) -- return
+            # whatever arrived before the read window closed
+            break
+        if not chunk:
+            break
+        data += chunk
     s.close()
 except Exception as e:
-    sys.stdout.write(f"ERROR: {e}")
+    if not data:
+        sys.stdout.write(f"ERROR: {e}")
+sys.stdout.write(data.decode(errors="replace"))
 PYEOF
 }
 
@@ -85,8 +99,8 @@ echo
 echo "== listchan =="
 resp="$(query listchan)"
 echo "  response: ${resp}"
-if echo "${resp}" | grep -q "tetrinet" && echo "${resp}" | grep -q "+OK"; then
-  pass "listchan shows the default 'tetrinet' channel and returns +OK"
+if echo "${resp}" | grep -q "lobby" && echo "${resp}" | grep -q "1x1" && echo "${resp}" | grep -q "+OK"; then
+  pass "listchan shows the default 'lobby' and '1x1' channels and returns +OK"
 else
   fail "unexpected listchan response: ${resp}"
 fi

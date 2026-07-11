@@ -408,10 +408,11 @@ struct channel_t *create_channel(char *name, char persistant)
   }
 
 /* find_or_create_lobby_channel(exclude_chan) - Finds (or creates) a
-   persistent "Lobby" variant (Lobby, Lobby1, Lobby2, ...) that has room
-   and is NOT exclude_chan (the room a player is being kicked from). Trying
-   the base name first, then numbered variants, naturally handles both
-   "Lobby is full" and "the player is being kicked FROM Lobby itself"
+   persistent "lobby" variant (lobby, lobby1, lobby2, ...) that has room
+   and is NOT exclude_chan (the room a player is being kicked from; NULL
+   when used as the connect-time overflow, in net_telnet()). Trying the
+   base name first, then numbered variants, naturally handles both
+   "lobby is full" and "the player is being kicked FROM the lobby itself"
    without any special-casing. Returns NULL only in the extreme case where
    the server's channel limit (maxchannels) is reached and no existing
    variant has room either. */
@@ -453,7 +454,7 @@ struct channel_t *find_or_create_lobby_channel(struct channel_t *exclude_chan)
           }
       }
 
-    lvprintf(1,"WARNING: No lobby variant available to redirect a kicked player (maxchannels reached)\n");
+    lvprintf(1,"WARNING: No lobby variant available (maxchannels reached)\n");
     return NULL;
   }
 
@@ -1622,7 +1623,7 @@ void net_connected(struct net_t *n, char *buf)
                           }
                         else
                           {
-                            tprintf(n->sock,"pline 0 %cChannel priority should lie in the range of 0 to 99. 0 prevents people from automatically joining.\xff",NAVY);
+                            tprintf(n->sock,"pline 0 %cChannel priority should lie in the range of 0 to 99. 1 fills first on connect; 0 prevents people from automatically joining.\xff",NAVY);
                           }
                       }
                     else
@@ -2185,7 +2186,11 @@ void net_connected(struct net_t *n, char *buf)
                     valid_param=2;
                     P = MSG+4;
                     if (securityread() < 0)
-                      securitywrite();
+                      { /* game.secure vanished mid-run: recreate it the same
+                           way boot does, default admin account included. */
+                        security_seed_default_admin();
+                        securitywrite();
+                      }
 
                     STRG[0]=0;
                     sscanf(P, "%80s", STRG);
@@ -3197,7 +3202,7 @@ void net_telnet_init(struct net_t *n, char *buf)
 /* Someone has just connected. So lets answer them */
 void net_telnet(struct net_t *n, char *buf)
   {
-    unsigned long ip; int k,l; char s[UHOSTLEN]; char strg[121];
+    unsigned long ip; char s[UHOSTLEN];
     char n1[4], n2[4], n3[4], n4[4];
     struct channel_t *chan, *ochan;
     struct net_t *net;
@@ -3211,12 +3216,14 @@ void net_telnet(struct net_t *n, char *buf)
     
     while ((net->sock==(-1)) && (errno==EAGAIN))
       net->sock=answer(n->sock,s,&ip,0);
-    /* Find a channel */
+    /* Find a channel: the room with the LOWEST non-zero priority that has
+       space wins (priority 1 fills first, then 2, ...; priority 0 means
+       "never auto-join this room"). */
     chan = chanlist;
     ochan = NULL;
     while ( chan != NULL )
       {
-        if ( ((ochan == NULL) || (chan->priority > ochan->priority)) && (numplayers(chan) < chan->maxplayers) && (chan->priority!=0))
+        if ( ((ochan == NULL) || (chan->priority < ochan->priority)) && (numplayers(chan) < chan->maxplayers) && (chan->priority!=0))
           ochan=chan; /* Found a likely channel */
         chan=chan->next;
       }
@@ -3262,101 +3269,16 @@ void net_telnet(struct net_t *n, char *buf)
       }
 
     if (ochan == NULL)
-      { /* No channels found, so create a new one :P */
-        if (numchannels() < game.maxchannels)
-          {
-            chan=chanlist;
-            while ( (chan!=NULL) && (chan->next!=NULL) ) chan=chan->next;
-            
-            
-            if (chan==NULL)
-              {
-                chanlist = malloc(sizeof(struct channel_t));
-                chan=chanlist;
-              }
-            else
-              {
-                chan->next = malloc(sizeof(struct channel_t));
-                chan=chan->next;
-              }
-              
-            chan->next=NULL;
-            chan->net=NULL;
-            
-            
-            
-            chan->maxplayers=DEFAULTMAXPLAYERS;
-            chan->status=STATE_ONLINE;
-            chan->description[0]=0;
-            chan->priority=DEFAULTPRIORITY;
-            chan->sd_mode=SD_NONE;
-            chan->persistant=0;
-            
-            /* Copy default settings */
-            chan->starting_level=game.starting_level;
-            chan->lines_per_level=game.lines_per_level;
-            chan->level_increase=game.level_increase;
-            chan->lines_per_special=game.lines_per_special;
-            chan->special_added=game.special_added;
-            chan->special_capacity=game.special_capacity;
-            chan->classic_rules=game.classic_rules;
-            chan->average_levels=game.average_levels;
-            chan->sd_timeout=game.sd_timeout;
-            chan->sd_lines_per_add=game.sd_lines_per_add;
-            chan->sd_secs_between_lines=game.sd_secs_between_lines;
-            strcpy(chan->sd_message,game.sd_message);
-            chan->block_leftl=game.block_leftl;
-            chan->block_leftz=game.block_leftz;
-            chan->block_square=game.block_square;
-            chan->block_rightl=game.block_rightl;
-            chan->block_rightz=game.block_rightz;
-            chan->block_halfcross=game.block_halfcross;
-            chan->block_line=game.block_line;
-            chan->special_addline=game.special_addline;
-            chan->special_clearline=game.special_clearline;
-            chan->special_nukefield=game.special_nukefield;
-            chan->special_randomclear=game.special_randomclear;
-            chan->special_switchfield=game.special_switchfield;
-            chan->special_clearspecial=game.special_clearspecial;
-            chan->special_gravity=game.special_gravity;
-            chan->special_quakefield=game.special_quakefield;
-            chan->special_blockbomb=game.special_blockbomb;
-            chan->stripcolour=game.stripcolour;
-            chan->serverannounce=game.serverannounce;
-            chan->pingintercept=game.pingintercept;
-  
-  
-            k=0;l=1;
-            while (l)
-              {
-                k++;
-                ochan=chanlist;
-                if (k==1)
-                  {
-                    sprintf(strg,"%s", DEFAULTCHANNEL);
-                    strncpy(chan->name,strg,CHANLEN-1); chan->name[CHANLEN-1]=0;
-                  }
-                else
-                  {
-                    sprintf(strg,"%s%d", DEFAULTCHANNEL,k);
-                    strncpy(chan->name,strg,CHANLEN-1); chan->name[CHANLEN-1]=0;
-                  }
-                l=0;
-                while( (ochan != NULL) && (!l) )
-                  {
-                    if ( (!strcasecmp(chan->name,ochan->name)) && (chan!=ochan))
-                      l=1;
-                    else
-                      ochan=ochan->next;
-                  }
-              }
-  
-          }
-        else
+      { /* Every room is full (or opted out with priority 0): overflow into
+           a lobby variant (lobby1, lobby2, ...), creating it if needed --
+           the same helper the /kick redirect uses. NULL only when the
+           maxchannels limit is reached and no variant has space either. */
+        chan = find_or_create_lobby_channel(NULL);
+        if (chan == NULL)
           {
             lvprintf(4,"Server FULL - Denying\n");
             tprintf(net->sock,"noconnecting Server is Full!\xff");
-            killsock(net->sock);  
+            killsock(net->sock);
             free(net);
             return;
           }
@@ -3364,7 +3286,7 @@ void net_telnet(struct net_t *n, char *buf)
     else
       {
         chan=ochan; /* Found a channel */
-      }    
+      }
     net->channel = chan;
     addnet(chan,net);
     
@@ -3683,9 +3605,20 @@ int main(int argc, char *argv[])
     boot_debug("Step 12/13: write_motd (game.motd)");
     write_motd();
 
-    boot_debug("Step 13/13: securityread (game.secure, creating it if missing)");
+    boot_debug("Step 13/13: securityread (game.secure, created with the default admin account if missing)");
     if (securityread() < 0)
-      securitywrite();
+      {
+        security_seed_default_admin();
+        securitywrite();
+      }
+    if (security_warn_default_admin())
+      { /* Echo the warning to stdout too -- we're still pre-fork here, so
+           someone starting the server interactively actually sees it. */
+        printf("BOOT: WARNING: game.secure still contains the DEFAULT admin account\n");
+        printf("BOOT: WARNING: ([admin] with password \"tetrinetx\"). Anyone who knows this\n");
+        printf("BOOT: WARNING: default can take over the server. Edit game.secure and change\n");
+        printf("BOOT: WARNING: BOTH the account name and the password.\n");
+      }
 
     boot_debug("All startup steps completed. Daemonizing now (forking to background;");
     boot_debug("from this point on, output goes to %s only). Watch for the", FILE_LOG);

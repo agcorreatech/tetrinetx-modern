@@ -21,11 +21,20 @@ int securitywrite()
     fprintf(file_out,"#   [nickname]\n");
     fprintf(file_out,"#   password=somepass\n");
     fprintf(file_out,"#\n");
-    fprintf(file_out,"# Typing \"/op <password>\" in the partyline\n");
-    fprintf(file_out,"# authenticates as the admin whose [nickname] matches the nickname you are\n");
-    fprintf(file_out,"# CURRENTLY connected with (there is no separate username to type -- your\n");
-    fprintf(file_out,"# TetriNET nickname IS the username, which is an extra layer of protection\n");
-    fprintf(file_out,"# since nicknames are unique server-wide and can't be changed mid-session).\n");
+    fprintf(file_out,"# Typing \"/op <password>\" in the partyline authenticates as the admin\n");
+    fprintf(file_out,"# whose [nickname] block matches the nickname you are CURRENTLY connected\n");
+    fprintf(file_out,"# with. There is no separate username to type: your TetriNET nickname IS\n");
+    fprintf(file_out,"# the username. Both must match -- knowing a password is not enough, you\n");
+    fprintf(file_out,"# also have to be connected under that exact nickname (nicknames are\n");
+    fprintf(file_out,"# unique server-wide and can't be changed mid-session).\n");
+    fprintf(file_out,"#\n");
+    fprintf(file_out,"# Passwords are matched case-sensitively and are capped at %d characters\n", PASSLEN-1);
+    fprintf(file_out,"# (longer values are silently truncated).\n");
+    fprintf(file_out,"#\n");
+    fprintf(file_out,"# A fresh install starts with the DEFAULT account below: [admin] with\n");
+    fprintf(file_out,"# password \"tetrinetx\". CHANGE IT -- both the account name and the\n");
+    fprintf(file_out,"# password -- before exposing the server. While the default is present,\n");
+    fprintf(file_out,"# the server logs a warning at every startup.\n");
     fprintf(file_out,"#\n");
     fprintf(file_out,"# Any text after a # is ignored, and can be used as comments.\n");
     fprintf(file_out,"\n");
@@ -74,6 +83,43 @@ int find_or_add_admin_slot(char *nick)
     security.adminlist[free_slot].nick[NICKLEN-1] = 0;
     security.adminlist[free_slot].password[0] = 0;
     return free_slot;
+  }
+
+/* security_seed_default_admin() - Seeds the built-in default admin account
+   ([admin] with password "tetrinetx"), used when game.secure doesn't exist
+   yet so a fresh install has a working admin login out of the box. */
+void security_seed_default_admin(void)
+  {
+    int slot;
+
+    slot = find_or_add_admin_slot("admin");
+    if (slot >= 0)
+      {
+        strncpy(security.adminlist[slot].password, "tetrinetx", PASSLEN-1);
+        security.adminlist[slot].password[PASSLEN-1]=0;
+      }
+  }
+
+/* security_warn_default_admin() - Logs a loud warning if the well-known
+   default admin account ([admin] / "tetrinetx") is still active, urging the
+   owner to change both the account name and the password. Returns 1 if the
+   default was found (so the boot sequence can also echo it to stdout). */
+char security_warn_default_admin(void)
+  {
+    int i;
+
+    for (i=0; i<MAXADMINS; i++)
+      {
+        if ( security.adminlist[i].inuse
+             && !strcasecmp(security.adminlist[i].nick,"admin")
+             && !strcmp(security.adminlist[i].password,"tetrinetx") )
+          {
+            lvprintf(0,"WARNING: %s still contains the DEFAULT admin account ([admin] with password \"tetrinetx\").\n", FILE_SECURE);
+            lvprintf(0,"WARNING: Anyone who knows this default can take over the server. Edit %s and change BOTH the account name and the password.\n", FILE_SECURE);
+            return 1;
+          }
+      }
+    return 0;
   }
 
 /* securityread() */
@@ -652,9 +698,10 @@ int gamewrite(void)
     fprintf(file_out,"# winlist_export_txt [1] - Export the winlist to a plain-text CSV file (game.winlist.csv)?\n");
     fprintf(file_out,"winlist_export_txt=%d\n", game.winlist_export_txt);
     fprintf(file_out,"\n");
-    fprintf(file_out,"# main_channel_name [Lobby] - Base name of the room(s) kicked players are\n");
+    fprintf(file_out,"# main_channel_name [lobby] - Base name of the server's lobby room(s):\n");
+    fprintf(file_out,"# where players land when they connect, and where kicked players are\n");
     fprintf(file_out,"# redirected to. If full (or if it's the room they're being kicked FROM),\n");
-    fprintf(file_out,"# variants Lobby1, Lobby2, ... are used/created automatically.\n");
+    fprintf(file_out,"# variants lobby1, lobby2, ... are used/created automatically.\n");
     fprintf(file_out,"main_channel_name=%s\n", game.main_channel_name);
     fprintf(file_out,"\n\n");
     fprintf(file_out,"# BLOCK OCCURANCY [Percentage value 0-100]. Must add up to 100\n");
@@ -683,7 +730,9 @@ int gamewrite(void)
     fprintf(file_out,"#  [CHANNELNAME]  # Note NO # in front of name.\n");
     fprintf(file_out,"#  maxplayers=6   # Number of players allowed in (6max)\n");
     fprintf(file_out,"#  topic=My Topic # The channel Topic\n");
-    fprintf(file_out,"#  priority=50    # Priority of channel\n");
+    fprintf(file_out,"#  priority=50    # Auto-join order: players connecting are placed in the\n");
+    fprintf(file_out,"#                 # room with the LOWEST non-zero priority that has space\n");
+    fprintf(file_out,"#                 # (1 fills first, then 2, ...). 0 = never auto-joined.\n");
     fprintf(file_out,"#  block_halfcross=12 #etc... any of the default options here\n");
     fprintf(file_out,"#\n");
     /* Now write any persistant channel info */
@@ -811,6 +860,12 @@ int gameread(void)
                     chanlist=malloc(sizeof(struct channel_t));
                     chanlist->next=chan;
                     chan=chanlist;
+
+                    /* BUGFIX: chan->net was never initialised here, so preset
+                       channels read from game.conf carried a garbage player
+                       list pointer -- the first connection to touch them
+                       (numplayers() walks chan->net) crashed the server. */
+                    chan->net=NULL;
 
                     chan->maxplayers=DEFAULTMAXPLAYERS;
                     chan->status=STATE_ONLINE;
@@ -1298,6 +1353,41 @@ int gameread(void)
 /*   Reset the game structure to default values, then try read the game data */
 /*   If game.conf does not exist, create new with defaults, otherwise do some */
 /*   sanity checks on the read in data */
+/* create_channel() is defined later in main.c (unity build: game.c is
+   #included before main.c's own functions) -- forward declaration so
+   create_default_channels() below can use it. */
+struct channel_t *create_channel(char *name, char persistant);
+
+/* create_default_channels() - Seeds the two default rooms used when
+   game.conf defines no [channel] blocks at all:
+     #lobby (game.main_channel_name) - topic "Server Lobby", priority 1:
+       the room players land in when they connect.
+     #1x1 - 2 players max, topic "Game 1x1", priority 2: fills next once
+       the lobby is full (auto-join picks the lowest non-zero priority
+       with room -- see net_telnet() in main.c).
+   Both are persistent presets, so /save writes them into game.conf. */
+void create_default_channels(void)
+  {
+    struct channel_t *chan;
+
+    chan = create_channel(game.main_channel_name, 1);
+    if (chan != NULL)
+      {
+        strncpy(chan->description,"Server Lobby",DESCRIPTIONLEN-1); chan->description[DESCRIPTIONLEN-1]=0;
+        chan->priority=1;
+      }
+
+    chan = create_channel("1x1", 1);
+    if (chan != NULL)
+      {
+        chan->maxplayers=2;
+        strncpy(chan->description,"Game 1x1",DESCRIPTIONLEN-1); chan->description[DESCRIPTIONLEN-1]=0;
+        chan->priority=2;
+      }
+
+    lvprintf(1,"No channels configured -- created default channels #%s and #1x1\n", game.main_channel_name);
+  }
+
 void init_game(void)
   { /* Initialise game parameters */
   
@@ -1337,7 +1427,7 @@ void init_game(void)
     game.command_ban=3;
     game.command_banlist=3;
     game.winlist_export_txt=1;
-    strncpy(game.main_channel_name,"Lobby", CHANLEN-1); game.main_channel_name[CHANLEN-1]=0;
+    strncpy(game.main_channel_name,"lobby", CHANLEN-1); game.main_channel_name[CHANLEN-1]=0;
     game.serverannounce=1;
     game.pingintercept=1;
     game.stripcolour=1;
@@ -1365,9 +1455,16 @@ void init_game(void)
     if (gameread() == -1)
       { /* File does not exist, so lets create it */
         lvprintf(4,"No game definitions found. Creating game.conf file with defaults.\n");
+        create_default_channels(); /* before gamewrite(), so the fresh
+                                      game.conf already lists them */
         if (gamewrite() == -1)
           fatal("Can't write game.conf. Check permissions!",0);
       }
+
+    /* game.conf existed but defined no [channel] blocks: seed the same
+       defaults in memory (the file itself is left untouched). */
+    if (chanlist == NULL)
+      create_default_channels();
   
     if ((game.block_leftl+game.block_leftz+game.block_square+game.block_rightl
        +game.block_rightz+game.block_halfcross+game.block_line) != 100)

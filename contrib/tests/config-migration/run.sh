@@ -70,7 +70,7 @@ check_conf_tag "command_ban" "3"
 check_conf_tag "command_banlist" "3"
 check_conf_tag "command_whois" "1"
 check_conf_tag "winlist_export_txt" "1"
-check_conf_tag "main_channel_name" "Lobby"
+check_conf_tag "main_channel_name" "lobby"
 
 if [[ -f game.secure ]]; then
   pass "game.secure created on fresh startup"
