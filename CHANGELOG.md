@@ -2,6 +2,75 @@
 
 Maintainer / Developer: Alexandro G. Corrêa <alex.linux@gmail.com>
 
+## Release 05 - 11/Jul/2026
+
+### Startup: quieter FQDN-fallback warning
+
+- `getmyhostname()` (`src/net.c`) no longer `printf()`s its "could not
+  determine a fully qualified hostname" warning to stdout on every
+  startup -- expected on any host without a configured FQDN (very common
+  on containers), not an error. Still recorded in `game.log` via
+  `lvprintf()` when `verbose>=2`, for troubleshooting.
+
+### Fix: `game.conf` string values corrupted by CRLF line endings
+
+- `gameread()` (`src/game.c`) parsed each line with `"%[^\n]"`, which
+  happily includes a trailing `\r` when `game.conf` has CRLF line
+  endings. Numeric fields (`atoi()`) were silently immune, but string
+  fields copied verbatim -- `pidfile`, `bindip`, `topic` -- were not:
+  `pidfile` ended up as the literal filename `"game.pid\r"`, a
+  different name from `"game.pid"` as far as the filesystem is
+  concerned, so the daemon wrote its PID to a file nothing else could
+  ever find by its expected name. This is what caused the Docker
+  entrypoint's PID-file wait loop to time out and restart-loop, even
+  though the server itself had started up fine. Now strips a trailing
+  `\r` from each config line right after reading it.
+
+### Fix: server crash on every client connection (`read_motd()`)
+
+- `read_motd()` (`src/main.c`) looped on `"!feof(file_in)"`, which only
+  becomes true *after* a read attempt has already run past the last
+  line -- so every call did one extra, guaranteed-to-fail `fscanf()`
+  past the real content, and that ordinary end-of-file was (wrongly)
+  treated as a fatal I/O error. `fatal()` kills every connected socket
+  and `exit()`s the *whole server process*, so this crashed the entire
+  server on every client connection that got far enough to be sent the
+  MOTD (not just the one being served) -- experienced by the client as
+  an abrupt "*** Server has Shut Down" disconnect. Fixed by looping on
+  the `fscanf()` result itself.
+- Also fixed a stray `\r` in MOTD lines (same CRLF issue as above,
+  affecting `game.motd` this time), which was being sent embedded in
+  the `pline` packet right before its `\xff` terminator.
+
+### Fix: `/whois` command-prefix collision with `/who`
+
+- `/whois <nick>` also matched `/who`'s `strncasecmp(MSG, "/who", 4)`
+  check (independent, unconditional `if`s, not `else if`), since
+  `"/whois"` starts with `"/who"` -- every `/whois` dumped the full
+  `/who` player table right after the whois info. Same latent bug
+  existed between `/ban` and `/banlist`. Fixed both by requiring the
+  matched prefix be followed by end-of-string or a space.
+- `/whois`'s field labels ("Team:", "Client version:", ...) now use
+  fixed-width padding instead of a single `\t` each, so values line up
+  in the same column regardless of label length.
+
+### New: colored, boxed ASCII-art MOTD
+
+- `read_motd()` now supports an optional leading `[NAME]` colour tag
+  per line in `game.motd` (e.g. `[YELLOW]...`), stripped before
+  sending; falls back to the previous plain-blue behaviour for
+  tag-less or unrecognised tags, so old motd files keep working
+  unchanged.
+- Sends a blank `pline 0` before and after the MOTD content, from code
+  rather than as an empty line in the file itself (an empty line there
+  would silently truncate the rest of the file -- `"%[^\n]"` requires
+  at least one character).
+- New `bin/game.motd`: a boxed banner with maintainer/repo info and a
+  `/help` pointer, encoded as Windows-1252/cp1252 rather than UTF-8 --
+  the real TetriNET 1.13 client renders accented characters (e.g.
+  "Corrêa") correctly in that encoding but mangles UTF-8's multi-byte
+  sequences.
+
 ## Release 04 - 09/Jul/2026
 
 ### Admin authentication (multi-admin, nickname + password)
