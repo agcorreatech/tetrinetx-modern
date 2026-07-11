@@ -2963,10 +2963,24 @@ int write_motd()
   if (file_out == NULL)
     return(-1);
 
-  fprintf(file_out,"Welcome! TetriNET is still alive! :)\n");
-  fprintf(file_out,"This server is running Tetrinet X Modern\n");
-  fprintf(file_out,"More info: https://github.com/agcorreatech/tetrinetx-modern\n");
-  
+  /* The default MOTD: the colored, boxed ASCII-art banner (leading [NAME]
+     colour tags are parsed by read_motd()). The \xea below is 'ê' in
+     Windows-1252/cp1252 -- NOT UTF-8 -- because the real TetriNET 1.13
+     client renders accented characters in that encoding and mangles
+     UTF-8's multi-byte sequences (written as a separate "\xea" string
+     chunk so a following letter can't extend the hex escape). */
+  fprintf(file_out,"[BLACK]+=====================================================+\n");
+  fprintf(file_out,"[BLUE]|                          T E T R I N E T - X       M O D E R N                         |\n");
+  fprintf(file_out,"[BLACK]+=====================================================+\n");
+  fprintf(file_out,"[DARKGRAY]|                  [  ]                Classic multiplayer Tetris,                    |\n");
+  fprintf(file_out,"[DARKGRAY]|             [  ][  ][  ]                 reloaded for modern servers!        |\n");
+  fprintf(file_out,"[BLACK]+=====================================================+\n");
+  fprintf(file_out,"[SILVER]|   Maintainer: Alexandro G. Corr" "\xea" "a <alex.linux@gmail.com>  |\n");
+  fprintf(file_out,"[SILVER]|   Repo: https://github.com/agcorreatech/tetrinetx-modern  |\n");
+  fprintf(file_out,"[BLACK]+=====================================================+\n");
+  fprintf(file_out,"[GREEN]|     New here? Type /help to see all available commands.     |\n");
+  fprintf(file_out,"[BLACK]+=====================================================+\n");
+
   fclose(file_out);
 
   return(1);

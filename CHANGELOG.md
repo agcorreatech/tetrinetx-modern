@@ -160,6 +160,26 @@ Robustness:
   "Corrêa") correctly in that encoding but mangles UTF-8's multi-byte
   sequences.
 
+### Changed: all default files fully embedded in the binary; maxchannels=99
+
+- Starting the binary in an empty directory now regenerates ALL of
+  `game.conf`, `game.motd` and `game.secure` matching the shipped
+  defaults, with no external files needed:
+  - `write_motd()` default was still the old plain 3-line text; it now
+    embeds the colored, boxed ASCII-art banner byte-for-byte identical
+    to `bin/game.motd` (including the Windows-1252 `ê` -- see the
+    Release 05 MOTD entry for why cp1252, not UTF-8).
+  - `game.conf` and `game.secure` were already generated (with the
+    default channels and the default admin account from the entries
+    above).
+- Default `maxchannels` raised 10 -> 99 (and `MAXLOBBYVARIANTS` raised
+  to match, so lobby overflow variants can actually use the room).
+- `bin/game.conf` regenerated from the new binary -- the committed copy
+  had drifted (missing `command_whois`/`command_ban`/`command_banlist`/
+  `winlist_export_txt`/`main_channel_name`, stale `command_priority=2`,
+  no `[lobby]`/`[1x1]` preset blocks). `bin/game.motd` needed no change
+  (the embedded banner reproduces it exactly).
+
 ### New: default channels #lobby + #1x1, lobby overflow, auto-join order
 
 - When `game.conf` defines no `[channel]` blocks, the server now seeds

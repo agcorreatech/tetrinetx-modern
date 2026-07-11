@@ -102,7 +102,7 @@
 #define MAXWINLISTSTATS MAXWINLIST	/* Extended winlist stats share the same ceiling as the winlist */
 #define MAXKICKCOOLDOWNS 100		/* Maximum number of simultaneous kick-cooldown entries */
 #define KICK_COOLDOWN_SECS (5*60)	/* How long (s) a kicked player is blocked from rejoining that room */
-#define MAXLOBBYVARIANTS 50		/* Safety cap on Lobby/Lobby1/Lobby2/... variants searched/created */
+#define MAXLOBBYVARIANTS 99		/* Safety cap on lobby/lobby1/lobby2/... variants searched/created (matches the maxchannels default) */
 
 typedef unsigned long IP;
 
