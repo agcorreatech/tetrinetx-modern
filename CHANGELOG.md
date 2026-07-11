@@ -160,6 +160,14 @@ Robustness:
   "Corrêa") correctly in that encoding but mangles UTF-8's multi-byte
   sequences.
 
+### Repo housekeeping: CLAUDE.md actually untracked
+
+- The earlier "CLAUDE.md added to .gitignore" change only added the
+  ignore pattern; the file itself was still tracked (gitignore has no
+  effect on already-tracked files), so edits kept showing up in git.
+  Now removed from the index (`git rm --cached`) — the file stays on
+  disk locally, completing the original intent.
+
 ### Changed: /help layout, /op-only auth, admin-only /priority, v1.13.26
 
 - Server version bumped to **v1.13.26** (`SERVERBUILD` in `src/main.h`).
