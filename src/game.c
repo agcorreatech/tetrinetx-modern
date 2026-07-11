@@ -106,11 +106,11 @@ int securityread(void)
       
     while(!feof(file_in))
       {
+        /* BUGFIX: stop on a failed read instead of re-processing the stale
+           buf from the previous iteration (see the same fix in gameread). */
         if(fscanf(file_in," %512[^\n]\n", buf) != 1)
-        {
-          printf("Error: Failed to read security file: %s.\n",FILE_SECURE);
-        }
-        
+          break;
+
         i=0; j=strlen(buf);
         while( (i<j) && (buf[i]!='#') ) i++;
         if (buf[i]=='#') buf[i] = '\0'; /* Truncate string to # char */
@@ -298,10 +298,11 @@ void readbanlist(void)
 
     while (!feof(file_in))
       {
+        /* BUGFIX: this used to do nothing on a failed read, so the last
+           parsed line was re-processed one extra time (a stray "[BAN]" tail
+           could even allocate a spurious empty ban). Stop the loop instead. */
         if (fscanf(file_in," %512[^\n]\n", buf) != 1)
-          {
-            /* EOF or blank remainder -- nothing to parse this pass */
-          }
+          break;
 
         i=0; j=strlen(buf);
         while ( (i<j) && (buf[i]!='#') ) i++;
@@ -759,10 +760,12 @@ int gameread(void)
       
     while(!feof(file_in))
       {
+        /* BUGFIX: on a failed read (EOF or an unparsable tail) this used to
+           only print an error and fall through, re-processing whatever stale
+           content was still in buf from the previous iteration. Stop the
+           loop instead -- the last real line has already been handled. */
         if(fscanf(file_in," %512[^\n]\n", buf) != 1)
-        {
-          printf("Error: Failed to read config file: %s.\n",FILE_CONF);
-        }
+          break;
         /* Strip a trailing '\r' (game.conf saved/edited with CRLF line
            endings, e.g. on Windows): %[^\n] stops at '\n' but happily
            includes a preceding '\r' as a normal character. Left alone,
@@ -776,9 +779,13 @@ int gameread(void)
         i=0; j=strlen(buf);
         while( (i<j) && (buf[i]!='#') ) i++;
         if (buf[i]=='#') buf[i] = '\0'; /* Truncate string to # char */
-        
+
+        /* BUGFIX: added the (j>=0) guard. Without it, a line that is empty
+           after comment/CR stripping makes j = -1 and this reads/writes
+           buf[-1] (out-of-bounds). The sibling readers securityread() and
+           readbanlist() already had this guard; gameread() didn't. */
         j=strlen(buf)-1;
-        while(buf[j]==' ')
+        while( (j>=0) && (buf[j]==' ') )
           {
             buf[j]='\0';       /* Strip trailing spaces */
             j--;

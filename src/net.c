@@ -571,8 +571,8 @@ void tprintf(int sock, char *format, ...)
   va_list va; static char SBUF2[1050];
   
   va_start(va,format);
-  
-  vsprintf(SBUF2,format,va);
+
+  vsnprintf(SBUF2,sizeof(SBUF2),format,va);
   if (strlen(SBUF2)>1022)
  {  
     SBUF2[1022]=0;   /* server can only take so much */

@@ -643,7 +643,7 @@ void lvprintf(int priority, char *format,...)
 { /* No bounds checking. Be very careful what you log */
   va_list va; static char SBUF2[768];
   va_start(va,format);
-  vsprintf(SBUF2,format,va);
+  vsnprintf(SBUF2,sizeof(SBUF2),format,va);
   if (strlen(SBUF2)>512)
     {
       SBUF2[512]=0;   /* truncate string. Of course, by now we have buffer overrun ;) */
@@ -664,7 +664,7 @@ void lprintf(char *format,...)
   char *P;
   time_t cur_time;
   va_start(va,format);
-  vsprintf(SBUF2,format,va);
+  vsnprintf(SBUF2,sizeof(SBUF2),format,va);
    
   file_out = fopen(FILE_LOG,"a");
   if (file_out != NULL)
@@ -956,9 +956,14 @@ int strclen(char *S)
                       && (S[i] != YELLOW)
                       && (S[i] != UNDERLINE) )
                 count++;
-        i++;  
+        i++;
       }
-    return(i);
+    /* BUGFIX: returned i (the full length, colour codes included) instead of
+       count (the visible length this function is documented to compute and
+       was accumulating but never returning). /who relied on this to pad
+       nick/team columns to a fixed VISIBLE width, so any name carrying
+       colour codes was mis-aligned. */
+    return(count);
   }
 
 /* Connected, recieving commands */
@@ -1160,7 +1165,10 @@ void net_connected(struct net_t *n, char *buf)
                         char *statusdesc;
                         char found_whois;
 
-                        P=MSG+7;
+                        /* Guard against reading past the terminator when no
+                           argument was given ("/whois" with nothing after).
+                           MSG+7 would point one byte beyond the '\0'. */
+                        P = (strlen(MSG) >= 7) ? MSG+7 : (char *)"";
                         found_whois=0;
                         chan=chanlist;
                         while ( (chan!=NULL) && !found_whois )
@@ -1573,8 +1581,11 @@ void net_connected(struct net_t *n, char *buf)
                     valid_param=2;
                     if ( passed_level(n,game.command_priority) )
                       {
-                        P=MSG+10;
-                        if ( (atoi(P) >= 0) && (atoi(P) < 100) )
+                        /* Guard against reading past the terminator when no
+                           argument was given; require a non-empty value so
+                           bare "/priority" doesn't silently set priority 0. */
+                        P = (strlen(MSG) >= 10) ? MSG+10 : (char *)"";
+                        if ( (P[0]!=0) && (atoi(P) >= 0) && (atoi(P) < 100) )
                           {
                             n->channel->priority=atoi(P);
                             lvprintf(4,"#%s-%s changed channel priority to %d\n",n->channel->name,n->nick,n->channel->priority);
@@ -1598,7 +1609,10 @@ void net_connected(struct net_t *n, char *buf)
                   }
 
                 /* Show MOTD */
-                if ( !strncasecmp(MSG, "/motd", 5) && (game.command_list>0))
+                /* BUGFIX: was gated by game.command_list (copy/paste from the
+                   /list handler below); /motd has its own permission flag
+                   game.command_motd, which was being ignored entirely. */
+                if ( !strncasecmp(MSG, "/motd", 5) && (game.command_motd>0))
                   {
                     valid_param=2;
                     read_motd(n);
@@ -2192,7 +2206,7 @@ void net_connected(struct net_t *n, char *buf)
                                       k = RED;
                                     else
                                       k = BLACK;
-                                    tprintf(n->sock,"pline 0 %c%d. %4d - Team %s\xff", k, i+1, winlist[i].score, winlist[i].name); 
+                                    tprintf(n->sock,"pline 0 %c%d. %4lu - Team %s\xff", k, i+1, winlist[i].score, winlist[i].name);
                                   }
                                 else
                                   {
@@ -2200,7 +2214,7 @@ void net_connected(struct net_t *n, char *buf)
                                       k = RED;
                                     else
                                       k = BLACK;
-                                    tprintf(n->sock,"pline 0 %c%d. %4d - Player %s\xff", k, i+1, winlist[i].score, winlist[i].name); 
+                                    tprintf(n->sock,"pline 0 %c%d. %4lu - Player %s\xff", k, i+1, winlist[i].score, winlist[i].name);
                                   }
                                 i++;
                               }
@@ -2321,7 +2335,7 @@ void net_connected(struct net_t *n, char *buf)
             if (num==1)
               lvprintf(4,"#%s-%s pauses game\n",n->channel->name,n->nick);
             else
-              lvprintf(5,"#%2-%s unpauses game\n",n->channel->name,n->nick);
+              lvprintf(5,"#%s-%s unpauses game\n",n->channel->name,n->nick);
               
             
             valid_param=1;
@@ -2863,8 +2877,12 @@ void read_motd(struct net_t *n)
   }
   else
   {
-    lvprintf(4,"ERROR: Failed to read MOTD file. Check folder permissions or remove the file.\n");
-    fatal("Failed to read MOTD file. Check folder permissions or remove the file.",0);
+    /* BUGFIX: this used to call fatal(), which kills EVERY connected socket
+       and exit()s the whole server -- just because one optional file
+       (game.motd) couldn't be opened (e.g. deleted at runtime). The MOTD is
+       cosmetic; a missing/unreadable one should never take the server down.
+       Log it and carry on serving this (and every other) client. */
+    lvprintf(2,"WARNING: Could not read MOTD file %s -- skipping MOTD for this client.\n", FILE_MOTD);
   }
 }
 
@@ -3037,8 +3055,20 @@ void net_telnet_init(struct net_t *n, char *buf)
     if (i < 2)
       {/* To few conversions - Player dies*/
         lvprintf(9,"%s: Disconnected due to invalid tetrisstart: %s\n",n->host,dec);
+        free(dec);
         killsock(n->sock); lostnet(n);
+        /* BUGFIX: this path was missing a return, so after lostnet() had
+           already free()d n, execution fell through into every check below
+           (nickname "server", nick ban, version, duplicate nick, ...) --
+           a use-after-free on a connection already killed. Every other
+           equivalent bail-out in this function returns right after
+           killsock()+lostnet(); this one just didn't. */
+        return;
       }
+    /* dec (malloc'd by tet_dec2str) is no longer needed past this point --
+       n->nick / n->version were already parsed out of it above. Freed here
+       so every subsequent early return below doesn't leak it. */
+    free(dec);
       
     /* Ensure a valid nickname */
     if (!strcasecmp(n->nick,"server"))
@@ -3150,11 +3180,14 @@ void net_telnet(struct net_t *n, char *buf)
     net->status=STAT_NOTPLAYING;
     sprintf(net->host,"%s", s);
     if (strlen(s) == 0)
-      { /* No resolved host... copy IP */
-        sprintf(n1,"%lu", (unsigned long)(n->addr&0xff000000)/(unsigned long)0x1000000);
-        sprintf(n2,"%lu", (unsigned long)(n->addr&0x00ff0000)/(unsigned long)0x10000);
-        sprintf(n3,"%lu", (unsigned long)(n->addr&0x0000ff00)/(unsigned long)0x100);
-        sprintf(n4,"%lu", (unsigned long)n->addr&0x000000ff);
+      { /* No resolved host... copy IP. BUGFIX: this built the dotted-quad
+           from n->addr (the LISTENING socket's own address) instead of
+           net->addr (the address of the client that just connected), so an
+           unresolved client was logged/displayed with the server's own IP. */
+        sprintf(n1,"%lu", (unsigned long)(net->addr&0xff000000)/(unsigned long)0x1000000);
+        sprintf(n2,"%lu", (unsigned long)(net->addr&0x00ff0000)/(unsigned long)0x10000);
+        sprintf(n3,"%lu", (unsigned long)(net->addr&0x0000ff00)/(unsigned long)0x100);
+        sprintf(n4,"%lu", (unsigned long)net->addr&0x000000ff);
         sprintf(net->host,"%s.%s.%s.%s",n1,n2,n3,n4);
       }
       
@@ -3418,26 +3451,30 @@ void net_eof(int z)
   
 void got_term(int z)
   {
-    struct net_t *nsock;
-    struct channel_t *chan;
+    struct net_t *nsock, *nextsock;
+    struct channel_t *chan, *nextchan;
 
     lvprintf(1,"Got TERM Signal - Quitting\n");
-    /* Kill all our socks */
-    nsock=NULL;
+    /* Kill all our socks. BUGFIX: this used to call lostnet(nsock) (which
+       free()s nsock, and may also free the whole channel when it was the
+       last player) and THEN dereference nsock->next / chan->next -- a
+       use-after-free walk of both lists. On shutdown there is nothing to
+       gain from lostnet()'s bookkeeping (notifying other players, freeing
+       memory moments before exit()): just close the sockets, capturing the
+       "next" pointers BEFORE anything can invalidate them. */
     chan=chanlist;
     while (chan!=NULL)
       {
+        nextchan=chan->next;
         nsock=chan->net;
         while (nsock!=NULL)
           {
+            nextsock=nsock->next;
             if (nsock->type != NET_FREE)
-              {
-                killsock(nsock->sock);
-                lostnet(nsock);
-              }
-            nsock=nsock->next;
+              killsock(nsock->sock);
+            nsock=nextsock;
           }
-        chan=chan->next;
+        chan=nextchan;
       }
       
     /* Write winlist etc... */
