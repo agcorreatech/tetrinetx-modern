@@ -2764,6 +2764,27 @@ void net_waitingforteam(struct net_t *n, char *buf)
     lvprintf(2,"#%s-%s New connection\n", n->channel->name,n->nick);
   }
 
+/* Named colours a game.motd line can request via a leading "[NAME]" tag
+   (see read_motd() below). Names match the #define's in main.h. */
+struct motd_colour_t { const char *name; int code; };
+static const struct motd_colour_t motd_colours[] = {
+  { "BLACK",    BLACK },
+  { "DARKGRAY", DARKGRAY },
+  { "SILVER",   SILVER },
+  { "NAVY",     NAVY },
+  { "BLUE",     BLUE },
+  { "CYAN",     CYAN },
+  { "GREEN",    GREEN },
+  { "NEON",     NEON },
+  { "TEAL",     TEAL },
+  { "BROWN",    BROWN },
+  { "RED",      RED },
+  { "MAGENTA",  MAGENTA },
+  { "VIOLET",   VIOLET },
+  { "YELLOW",   YELLOW },
+  { "WHITE",    WHITE },
+};
+
 /* Read the MOTD file */
 void read_motd(struct net_t *n)
 {
@@ -2775,6 +2796,12 @@ void read_motd(struct net_t *n)
   /* File exists, so read it */
   if (file_in != NULL)
   {
+    /* Blank line before the MOTD content. Sent from code, not as a blank
+       line in game.motd itself: an empty line there would fail to match
+       "%[^\n]" (it requires at least one character), silently ending the
+       read loop right there and skipping everything after it. */
+    tprintf(n->sock,"pline 0 \xff");
+
     /* BUGFIX: this used to loop on "!feof(file_in)", which only becomes
        true AFTER a read attempt has already run past the last line -- so
        every call did one extra, guaranteed-to-fail fscanf() beyond the
@@ -2787,15 +2814,49 @@ void read_motd(struct net_t *n)
        iteration entirely. */
     while (fscanf(file_in,"%1023[^\n]\n", motd) == 1)
     {
+      char *text;
+      int colour, mlen, i;
+
       /* Strip a trailing '\r' (game.motd saved/edited with CRLF line
          endings): "%[^\n]" stops at '\n' but includes a preceding '\r'
          as an ordinary character, which would otherwise be sent
          verbatim, embedded in the "pline" packet right before its
          terminating '\xff'. */
-      int mlen = strlen(motd);
+      mlen = strlen(motd);
       if (mlen>0 && motd[mlen-1]=='\r') motd[mlen-1]='\0';
-      tprintf(n->sock,"pline 0 %c%c%s\xff", BOLD, BLUE, motd);
+
+      /* Optional per-line colour: a leading "[NAME]" tag (NAME one of
+         motd_colours[] above) picks the colour for that line and is
+         stripped before sending; anything else -- no tag, or an
+         unrecognised name -- falls back to the original plain BLUE,
+         sent exactly as written (keeps old, tag-less motd files working
+         unchanged). */
+      text = motd;
+      colour = BLUE;
+      if (motd[0]=='[')
+      {
+        char *close = strchr(motd, ']');
+        if (close != NULL)
+        {
+          *close = '\0';
+          for (i=0; i < (int)(sizeof(motd_colours)/sizeof(motd_colours[0])); i++)
+          {
+            if (!strcasecmp(motd+1, motd_colours[i].name))
+            {
+              colour = motd_colours[i].code;
+              text = close+1;
+              break;
+            }
+          }
+          if (text == motd) *close = ']'; /* not a recognised tag -- restore and send as-is */
+        }
+      }
+
+      tprintf(n->sock,"pline 0 %c%c%s\xff", BOLD, colour, text);
     }
+
+    /* Blank line after the MOTD content, mirroring the one before it. */
+    tprintf(n->sock,"pline 0 \xff");
 
     lvprintf(4,"File game.motd read successfully.\n");
     fclose(file_in);
