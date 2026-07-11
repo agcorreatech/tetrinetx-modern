@@ -2456,7 +2456,13 @@ void net_connected(struct net_t *n, char *buf)
             while(nsock!=NULL)
               {
                 if ( (nsock->type == NET_CONNECTED) && (nsock->channel==n->channel))
-                  tprintf(nsock->sock,"pause %d\xff", num);
+                  {
+                    tprintf(nsock->sock,"pause %d\xff", num);
+                    /* Announce who did it, in the same red/bold style as the
+                       client's own game-state messages */
+                    tprintf(nsock->sock,"pline 0 %c*** The Game Has %c%s%c by %c%s%c\xff",
+                            RED, BOLD, (num==1)?"Paused":"Unpaused", BOLD, BOLD, n->nick, BOLD);
+                  }
                 nsock=nsock->next;
               }
             if (num==1)
@@ -2615,11 +2621,11 @@ void net_connected(struct net_t *n, char *buf)
                                   {
                                     if ( strlen(ns1->team) > 0)
                                       { /* a team won */
-                                        tprintf(nsock->sock,"pline 0 %c-=== Team %s%c WON ===-\xff", BOLD, ns1->team, BLACK);
+                                        tprintf(nsock->sock,"pline 0 %c*** The Game Has %cEnded%c - The winner is Team %c%s%c! Congratulations!\xff", RED, BOLD, BOLD, BOLD, ns1->team, BOLD);
                                       }
                                     else
                                       { /* a player won */
-                                        tprintf(nsock->sock,"pline 0 %c-=== Player %s%c WON ===-\xff", BOLD, ns1->nick, BLACK);
+                                        tprintf(nsock->sock,"pline 0 %c*** The Game Has %cEnded%c - The winner is %c%s%c! Congratulations!\xff", RED, BOLD, BOLD, BOLD, ns1->nick, BOLD);
                                       }
                                   }
                               }
@@ -2636,7 +2642,7 @@ void net_connected(struct net_t *n, char *buf)
                         tprintf(n->sock,"endgame\xff");
                         if (n->channel->serverannounce)
                           {
-                            tprintf(n->sock,"pline 0 %c-=== Game Over - no winner ===-%c\xff", BOLD, BLACK);
+                            tprintf(n->sock,"pline 0 %c*** The Game Has %cEnded%c - No Winner! :(\xff", RED, BOLD, BOLD);
                           }
                       }
                     writewinlist();
@@ -2810,6 +2816,19 @@ void net_connected(struct net_t *n, char *buf)
                         nsock->timeout = game.timeout_outgame;
                       }
                   }
+                nsock=nsock->next;
+              }
+
+            /* Announce who started/stopped the game. The bundled client's own
+               generic "*** The Game Has Started/Ended" lines (printed on the
+               newgame/endgame packets) are blanked out in its executable, so
+               these server lines -- which say WHO did it -- replace them. */
+            nsock=n->channel->net;
+            while (nsock!=NULL)
+              {
+                if (nsock->type == NET_CONNECTED)
+                  tprintf(nsock->sock,"pline 0 %c*** The Game Has %c%s%c by %c%s%c\xff",
+                          RED, BOLD, (num==1)?"Started":"Ended", BOLD, BOLD, n->nick, BOLD);
                 nsock=nsock->next;
               }
           }

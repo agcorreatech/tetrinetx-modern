@@ -88,6 +88,17 @@ Maintainer / Developer: Alexandro G. Corrêa <alex.linux@gmail.com>
   everything that needs a real authenticated game session.
 - New beginner's guides in English and Brazilian Portuguese ("How to
   start and play" / "Como iniciar e jogar") at the repository root.
+- Game actions are now announced with WHO did them, in the client's
+  classic red style with the action and nickname in bold:
+  "*** The Game Has Started/Ended/Paused/Unpaused by <nick>" (pause and
+  unpause previously showed nothing at all). The winner announcement is
+  now "*** The Game Has Ended - The winner is <nick>! Congratulations!"
+  ("... Team <team>! ..." in team games) and the no-winner one is
+  "*** The Game Has Ended - No Winner! :(" — replacing the old
+  "-=== ... WON ===-" / "-=== Game Over - no winner ===-" texts. The
+  bundled client's own generic "The Game Has Started/Ended" lines were
+  blanked out so the attributed server lines aren't shown twice
+  (unpatched clients will see both).
 - Bundled Windows client (TETRINET.EXE inside the client zip) updated
   with two clearer messages: "*** <nick> is Now Alone" now reads
   "*** <nick> has No Team", and "*** Server has Shut Down" — which the

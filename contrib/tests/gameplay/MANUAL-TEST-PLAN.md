@@ -276,19 +276,28 @@ As an authenticated admin (section 3):
 
 ## 9. Gameplay: starting a game, winning, single-player fix
 
-- [ ] With 2+ players in a channel, start a game. Play until one player
-      tops out (loses). **Expected:** the loser gets `playerlost`
-      broadcast, the game continues for the remaining player(s).
+- [ ] With 2+ players in a channel, start a game. **Expected:** every
+      client shows "*** The Game Has **Started** by **<nick>**" (red,
+      action and nickname in bold; the server sends this line — the
+      bundled client's own generic "The Game Has Started" text is
+      blanked out).
+- [ ] Play until one player tops out (loses). **Expected:** the loser
+      gets `playerlost` broadcast, the game continues for the remaining
+      player(s).
 - [ ] Let the game finish normally with 2 players (one wins). Confirm:
       (a) `/winlist` shows the winner with an updated score on **both**
       clients (the winlist-broadcast fix from Release 03/04 — every
       connected player receives it, not just the first one in the
-      channel's internal list), (b) the server announces the winner via
-      partyline if `serverannounce` is on.
+      channel's internal list), (b) with `serverannounce` on, the server
+      announces "*** The Game Has **Ended** - The winner is **<nick>**!
+      Congratulations!" (or "... Team **<team>**! ..." in a team game).
+- [ ] As chanop, click **Stop game** mid-game. **Expected:** every client
+      shows "*** The Game Has **Ended** by **<nick>**".
 - [ ] With exactly **one** player in a channel, start a game and
       deliberately lose (top out). **Expected:** the game ends cleanly
       (not stuck in `STATE_INGAME` forever) and the partyline shows
-      "Game Over - no winner" — this is the single-player endgame fix.
+      "*** The Game Has **Ended** - No Winner! :(" — this is the
+      single-player endgame fix.
 
 ## 10. Pause / unpause / stop game
 
@@ -296,8 +305,11 @@ With 2+ players in a channel and a game started (section 9), as the
 channel's chanop (the player who can start/stop the game):
 
 - [ ] Click **Pause game**. **Expected:** every client shows the paused
-      overlay and pieces stop falling.
-- [ ] Click **Unpause** (continue). **Expected:** every client resumes.
+      overlay and pieces stop falling, and the partyline shows
+      "*** The Game Has **Paused** by **<nick>**".
+- [ ] Click **Unpause** (continue). **Expected:** every client resumes,
+      and the partyline shows "*** The Game Has **Unpaused** by
+      **<nick>**".
 - [ ] **Pause and unpause again, several times in a row.** **Expected:**
       it keeps working every time — this is the regression this section
       exists for. Before the fix, the game could be paused and unpaused
