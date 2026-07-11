@@ -160,6 +160,14 @@ Robustness:
   "Corrêa") correctly in that encoding but mangles UTF-8's multi-byte
   sequences.
 
+### Build: committed binary updated
+
+- `bin/tetrix-modern.linux` rebuilt from the current source so the
+  committed binary includes the pause/unpause fix and the code-review
+  round above (it had been rebuilt during that session but the updated
+  binary was left out of those commits). Verified byte-identical to a
+  clean build of the same source via the Docker `build` stage.
+
 ## Release 04 - 09/Jul/2026
 
 ### Admin authentication (multi-admin, nickname + password)
