@@ -160,6 +160,13 @@ Robustness:
   "Corrêa") correctly in that encoding but mangles UTF-8's multi-byte
   sequences.
 
+### Changed: /help header formatting
+
+- The `HELP - Server Commands - ...` header line is now bold black.
+- A blank spacer line is sent before `--- Channel Configuration ---`,
+  and that section header is now bold black too (same `pline 0 \xff`
+  blank-line technique the MOTD uses).
+
 ### Changed: Docker image no longer ships config files
 
 - With all defaults now embedded in the binary (entry below), the Docker

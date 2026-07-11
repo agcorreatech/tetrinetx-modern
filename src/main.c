@@ -2259,7 +2259,7 @@ void net_connected(struct net_t *n, char *buf)
                         int help_i;
                         char help_can_use;
 
-                        tprintf(n->sock,"pline 0 HELP - Server Commands - Tetrinet X Modern - v%s.%s\xff", TETVERSION, SERVERBUILD);
+                        tprintf(n->sock,"pline 0 %c%cHELP - Server Commands - Tetrinet X Modern - v%s.%s\xff", BOLD, BLACK, TETVERSION, SERVERBUILD);
 
                         help_is_chanconfig_section_shown = 0;
                         help_is_admin_section_shown = 0;
@@ -2282,7 +2282,8 @@ void net_connected(struct net_t *n, char *buf)
 
                             if (help_table[help_i].section == HELP_SECTION_CHANCONFIG && !help_is_chanconfig_section_shown)
                               {
-                                tprintf(n->sock,"pline 0 %c--- Channel Configuration ---\xff", RED);
+                                tprintf(n->sock,"pline 0 \xff"); /* blank spacer line */
+                                tprintf(n->sock,"pline 0 %c%c--- Channel Configuration ---\xff", BOLD, BLACK);
                                 help_is_chanconfig_section_shown = 1;
                               }
                             if (help_table[help_i].section == HELP_SECTION_ADMIN && !help_is_admin_section_shown)
