@@ -175,7 +175,7 @@ Robustness:
 ### Changed: /help list reorganized
 
 - General section reordered to: `/list`, `/join`, `/who`, `/whois`,
-  `/winlist`, `/msg`, `/me`, `/motd` -- and `/motd`'s description is now
+  `/msg`, `/me`, `/winlist`, `/motd` -- and `/motd`'s description is now
   "Displays the server welcome message".
 - `/op`'s description shortened to "Gain SERVER ADMIN status" (still the
   last entry of the list).

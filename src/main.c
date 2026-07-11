@@ -313,9 +313,9 @@ struct help_entry_t help_table[] = {
   { "/join <#channel|number>",       "Joins or creates a virtual tetrinet channel",&game.command_join,       NULL, HELP_SECTION_GENERAL },
   { "/who",                          "Lists connected players",                    &game.command_who,        NULL, HELP_SECTION_GENERAL },
   { "/whois <nickname>",             "Shows detailed info about a player",         &game.command_whois,      NULL, HELP_SECTION_GENERAL },
-  { "/winlist [n]",                  "Shows top n winlist entries",                &game.command_winlist,    NULL, HELP_SECTION_GENERAL },
   { "/msg <playernumber(s)> <msg>",  "Privately messages player(s)",               &game.command_msg,        NULL, HELP_SECTION_GENERAL },
   { "/me <action>",                  "Performs an action",                         NULL,                     NULL, HELP_SECTION_GENERAL },
+  { "/winlist [n]",                  "Shows top n winlist entries",                &game.command_winlist,    NULL, HELP_SECTION_GENERAL },
   { "/motd",                         "Displays the server welcome message",        &game.command_motd,       NULL, HELP_SECTION_GENERAL },
 
   /* --- Channel configuration --- */
