@@ -160,6 +160,26 @@ Robustness:
   "Corrêa") correctly in that encoding but mangles UTF-8's multi-byte
   sequences.
 
+### New: restricted nicknames -- admin-account nicks must authenticate
+
+- Connecting under a nickname that has an admin account in `game.secure`
+  now arms a 60-second deadline (`RESTRICTED_NICK_AUTH_SECS` in
+  `src/main.h`): if the player hasn't authenticated with `/op` by then,
+  they are disconnected with "Restricted nickname. Authentication
+  required to stay connected." Nothing is announced on connect, on
+  purpose -- an impostor probing admin nicknames learns nothing until
+  the disconnect. A successful `/op` disarms the deadline; non-admin
+  nicknames are unaffected. Enforced once per second alongside the
+  regular socket timeouts in `check_timeouts()`.
+
+### Changed: /help list reorganized
+
+- General section reordered to: `/list`, `/join`, `/who`, `/whois`,
+  `/winlist`, `/msg`, `/me`, `/motd` -- and `/motd`'s description is now
+  "Displays the server welcome message".
+- `/op`'s description shortened to "Gain SERVER ADMIN status" (still the
+  last entry of the list).
+
 ### Changed: /help header formatting
 
 - The `HELP - Server Commands - ...` header line is now bold black.

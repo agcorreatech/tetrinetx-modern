@@ -103,6 +103,7 @@
 #define MAXKICKCOOLDOWNS 100		/* Maximum number of simultaneous kick-cooldown entries */
 #define KICK_COOLDOWN_SECS (5*60)	/* How long (s) a kicked player is blocked from rejoining that room */
 #define MAXLOBBYVARIANTS 99		/* Safety cap on lobby/lobby1/lobby2/... variants searched/created (matches the maxchannels default) */
+#define RESTRICTED_NICK_AUTH_SECS 60	/* Seconds a player connected under an admin-account nickname has to /op before being disconnected */
 
 typedef unsigned long IP;
 
@@ -242,6 +243,7 @@ struct net_t {
   unsigned char field[FIELD_MAXX][FIELD_MAXY];   /* Playing Field of player */
   unsigned char status;			/* Current Status - STAT_XXXXX */
   int timeout;				/* Timeout on socket */
+  int op_auth_timeout;			/* Seconds left for a restricted (admin-account) nickname to /op; 0 = not armed */
   int securitylevel;			/* What security LEVEL - LEVEL_XXX */
   
   struct channel_t *channel;		/* What channel we're on */

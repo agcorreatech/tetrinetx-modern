@@ -85,6 +85,20 @@ int find_or_add_admin_slot(char *nick)
     return free_slot;
   }
 
+/* is_admin_nick(nick) - Returns 1 if this nickname has a registered admin
+   account in game.secure. Used to "restrict" those nicknames: a player
+   connecting under one must authenticate with /op within
+   RESTRICTED_NICK_AUTH_SECS or be disconnected (see check_timeouts()). */
+char is_admin_nick(char *nick)
+  {
+    int i;
+
+    for (i=0; i<MAXADMINS; i++)
+      if ( security.adminlist[i].inuse && !strcasecmp(security.adminlist[i].nick, nick) )
+        return 1;
+    return 0;
+  }
+
 /* security_seed_default_admin() - Seeds the built-in default admin account
    ([admin] with password "tetrinetx"), used when game.secure doesn't exist
    yet so a fresh install has a working admin login out of the box. */

@@ -309,14 +309,14 @@ struct help_entry_t {
 
 struct help_entry_t help_table[] = {
   /* --- General commands --- */
+  { "/list",                         "Lists available virtual TetriNET channels",  &game.command_list,       NULL, HELP_SECTION_GENERAL },
+  { "/join <#channel|number>",       "Joins or creates a virtual tetrinet channel",&game.command_join,       NULL, HELP_SECTION_GENERAL },
   { "/who",                          "Lists connected players",                    &game.command_who,        NULL, HELP_SECTION_GENERAL },
   { "/whois <nickname>",             "Shows detailed info about a player",         &game.command_whois,      NULL, HELP_SECTION_GENERAL },
   { "/winlist [n]",                  "Shows top n winlist entries",                &game.command_winlist,    NULL, HELP_SECTION_GENERAL },
-  { "/motd",                         "Displays the welcome message",               &game.command_motd,       NULL, HELP_SECTION_GENERAL },
   { "/msg <playernumber(s)> <msg>",  "Privately messages player(s)",               &game.command_msg,        NULL, HELP_SECTION_GENERAL },
   { "/me <action>",                  "Performs an action",                         NULL,                     NULL, HELP_SECTION_GENERAL },
-  { "/list",                         "Lists available virtual TetriNET channels",  &game.command_list,       NULL, HELP_SECTION_GENERAL },
-  { "/join <#channel|number>",       "Joins or creates a virtual tetrinet channel",&game.command_join,       NULL, HELP_SECTION_GENERAL },
+  { "/motd",                         "Displays the server welcome message",        &game.command_motd,       NULL, HELP_SECTION_GENERAL },
 
   /* --- Channel configuration --- */
   { "/move <playernum> <newnum>",    "Moves a player to a new player number",      &game.command_move,       NULL, HELP_SECTION_CHANCONFIG },
@@ -335,7 +335,7 @@ struct help_entry_t help_table[] = {
   { "/banlist",                     "Lists all active bans",                       &game.command_banlist,    NULL, HELP_SECTION_ADMIN },
 
   /* /op is intentionally last (see comment above) */
-  { "/op <password>",                "Gain AUTHENTICATED SERVER ADMIN status",     &game.command_op,         NULL, HELP_SECTION_GENERAL },
+  { "/op <password>",                "Gain SERVER ADMIN status",                   &game.command_op,         NULL, HELP_SECTION_GENERAL },
 
   { NULL, NULL, NULL, NULL, 0 }
 };
@@ -2198,6 +2198,7 @@ void net_connected(struct net_t *n, char *buf)
                     if ( (STRG[0]!=0) && check_admin_login(n->nick, STRG) )
                       { /* Passed, this player is OP */
                         n->securitylevel =LEVEL_AUTHOP;
+                        n->op_auth_timeout=0; /* restricted-nickname deadline satisfied */
                         tprintf(n->sock,"pline 0 %cYour security level is now: %cAUTHENTICATED OP\xff", GREEN, RED);
                         lvprintf(4,"#%s-%s authenticated successfully for op status\n", n->channel->name,n->nick);
                       }
@@ -3198,7 +3199,15 @@ void net_telnet_init(struct net_t *n, char *buf)
       }
 
     n->team[0] = 0; /* Clear Team */
-    
+
+    /* Restricted nicknames: a nickname registered as an admin account in
+       game.secure must authenticate with /op within
+       RESTRICTED_NICK_AUTH_SECS or it gets disconnected (enforced in
+       check_timeouts()). Deliberately NOT announced to the client on
+       connect: an impostor probing admin nicknames learns nothing. */
+    if (is_admin_nick(n->nick))
+      n->op_auth_timeout = RESTRICTED_NICK_AUTH_SECS;
+
     // Send motd to the player
     read_motd(n);
 
@@ -3248,6 +3257,7 @@ void net_telnet(struct net_t *n, char *buf)
     net->addr=ip;
     net->port=n->port;
     net->timeout=game.timeout_outgame;
+    net->op_auth_timeout=0;
     net->securitylevel=LEVEL_NORMAL;
     net->status=STAT_NOTPLAYING;
     sprintf(net->host,"%s", s);
@@ -3511,7 +3521,7 @@ void check_timeouts(void)
             if (n->timeout > 0) n->timeout--;
             if (!n->timeout)
               { /* Timeout has occurred */
-            
+
                 switch (n->type)
                   {
                     case NET_TELNET_INIT:
@@ -3526,6 +3536,24 @@ void check_timeouts(void)
                         found=1;
                         break;
                       }
+                  }
+              }
+
+            /* Restricted nickname deadline: connected under an admin-account
+               nickname but still not authenticated when the countdown armed
+               in net_telnet_init() runs out -> disconnect. (A successful
+               /op zeroes op_auth_timeout, so this never fires for the real
+               admin.) */
+            if ( !found && (n->op_auth_timeout > 0) )
+              {
+                n->op_auth_timeout--;
+                if ( (n->op_auth_timeout == 0) && (n->securitylevel < LEVEL_AUTHOP) )
+                  {
+                    lvprintf(1,"#%s-%s: Restricted (admin-account) nickname did not authenticate within %d seconds -- disconnecting\n", n->channel->name, n->nick, RESTRICTED_NICK_AUTH_SECS);
+                    tprintf(n->sock,"pline 0 %cRestricted nickname. Authentication required to stay connected.\xff", RED);
+                    killsock(n->sock);
+                    lostnet(n);
+                    found=1;
                   }
               }
             if (!found) n=n->next;

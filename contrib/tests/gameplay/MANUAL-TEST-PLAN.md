@@ -83,6 +83,20 @@ Default account first — on a **fresh** server (no `game.secure` yet):
 - [ ] Edit `game.secure` to rename the account/change the password,
       restart, and confirm the startup `WARNING` is gone.
 
+Restricted nicknames (admin-account nicks must authenticate):
+
+- [ ] Connect with a nickname that has an admin account in `game.secure`
+      (e.g. `admin` on a fresh install) and do NOT run `/op`.
+      **Expected:** no warning is shown on connect, but after ~60 seconds
+      (`RESTRICTED_NICK_AUTH_SECS`) the player is disconnected with
+      "Restricted nickname. Authentication required to stay connected."
+- [ ] Reconnect with the same nickname and run `/op <password>` within
+      60 seconds. **Expected:** authenticates normally and is NOT
+      disconnected afterwards (play/idle a few minutes to confirm).
+- [ ] Connect with a non-admin nickname and stay idle past 60 seconds.
+      **Expected:** nothing happens (the deadline only arms for
+      nicknames registered in `game.secure`).
+
 Then multi-admin: stop the server, edit `game.secure` to:
 
 ```
