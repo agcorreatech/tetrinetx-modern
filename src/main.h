@@ -103,11 +103,22 @@
 #define MAXKICKCOOLDOWNS 100		/* Maximum number of simultaneous kick-cooldown entries */
 #define KICK_COOLDOWN_SECS (5*60)	/* How long (s) a kicked player is blocked from rejoining that room */
 #define MAXLOBBYVARIANTS 99		/* Safety cap on lobby/lobby1/lobby2/... variants searched/created (matches the maxchannels default) */
-#define RESTRICTED_NICK_AUTH_SECS 60	/* Seconds a player connected under an admin-account nickname has to /op before being disconnected */
+#define RESTRICTED_NICK_AUTH_SECS 25	/* Seconds a player connected under an admin-account nickname has to /op before being disconnected */
+#define ADMINPASS_MINLEN 6	/* Minimum length /password accepts for a new admin password (max is PASSLEN-1) */
 
 typedef unsigned long IP;
 
 /* public structure of all the net connections */ 
+
+/* Winlist Structure (defined before channel_t, which embeds an array of
+   it: a channel flagged own_winlist=1 keeps its own separate winlist
+   instead of sharing the server-wide global one -- see game.c) */
+struct winlist_t {
+  char status;				/* Type. p=player, t=team */
+  char name[NICKLEN+1];			/* Name of player/team */
+  unsigned long int score;		/* What they scored */
+  char inuse;				/* 1=inuse 0=available */
+};
 
 struct channel_t {
   char name[CHANLEN+1];			/* Name of the channel */
@@ -117,6 +128,8 @@ struct channel_t {
   struct channel_t *next;		/* Next in the queue */
   char description[DESCRIPTIONLEN];	/* Description */
   char persistant;			/* 1=can't delete */
+  char own_winlist;			/* 1 = channel keeps its OWN winlist (file game.winlist.<name>) instead of the global one */
+  struct winlist_t winlist[MAXWINLIST];	/* The channel's own winlist, used when own_winlist=1 */
   struct net_t *net;			/* Net structure */
     
   int sd_timeleft;			/* Sudden Death Timeout */
@@ -252,13 +265,8 @@ struct net_t {
   struct net_t *next;			/* Next in list */
 }; 
 
-/* Winlist Structure */
-struct winlist_t {
-  char status;				/* Type. p=player, t=team */
-  char name[NICKLEN+1];			/* Name of player/team */
-  unsigned long int score;		/* What they scored */
-  char inuse;				/* 1=inuse 0=available */
-};
+/* (struct winlist_t lives above struct channel_t, which embeds an array
+   of it for per-channel winlists) */
 
 /* Extended winlist statistics (victory-related only). Kept entirely separate
    from struct winlist_t / game.winlist above: the original winlist (protocol,

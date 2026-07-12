@@ -2,7 +2,7 @@
 
 Maintainer / Developer: Alexandro G. Corrêa <alex.linux@gmail.com>
 
-## Release 04 - 11/Jul/2026
+## Release 04 - 12/Jul/2026
 
 - Server version bumped to v1.13.26, shown in /help, in the startup
   banner/log and in the "version" query reply.
@@ -118,6 +118,62 @@ Maintainer / Developer: Alexandro G. Corrêa <alex.linux@gmail.com>
 - Repository organization: docker/, tests/ and the historical
   OLD.HISTORY/OLD.WISHLIST files moved under contrib/; the changelog is
   now written in English with dated release headings.
+- Fixed: after being kicked or moved to another channel, the player's
+  client kept showing the OLD room's player list — the server now sends
+  the full player-panel cleanup on every channel move.
+- Fixed: switching channels with /join mid-game did not end the old
+  game nor declare the remaining player the winner.
+- Fixed: /kick could target yourself; self-kick is now rejected.
+- Fixed: a winner's "level reached" could record memory garbage into the
+  extended stats when the game ended before the first level-up.
+- Fixed: clearing the winlist left the extended stats (wins, best/avg
+  level) and the CSV export behind, permanently out of sync.
+- New per-channel winlists: /ownwinlist <0/1> gives a channel its own
+  separate winlist (kept in game.winlist.<name>, auto-saved to
+  game.conf); /winlists lists every winlist on the server; /winlist
+  accepts [n] [#channel|global] to view any of them; /clear now takes a
+  mandatory target (global or #channel) and announces to the affected
+  players WHO reset it. Extended stats and the CSV export remain
+  global-winlist-only.
+- When a player tops out, the channel now sees "*** <nick> Has Lost the
+  Game" (same red/bold style); when the loss also ends the game, the
+  winner announcement is always the last line.
+- /kick that removes one of the last two playing players now ANNULS the
+  game — no winner, no points — so a chanop can't kick their final
+  opponent to steal the win. A voluntary /join or a disconnect still
+  crowns the survivor; kicks with 3+ players playing don't end the game.
+- A room emptied mid-game or mid-pause (players leaving, disconnecting
+  or timing out) always resets to its normal state with no winner — the
+  next joiner can no longer walk into a ghost game or ghost pause.
+- New connections now ALWAYS land in a lobby room (lobby, lobby1, ...,
+  created on demand) — never in a game room like #1x1, even with free
+  slots; game rooms are entered explicitly with /join. Channel priority
+  now only orders the /list display.
+- /topic on preset/persistent channels is reserved for authenticated
+  admins; regular players can only retitle rooms they created (and
+  /help hides /topic where it can't be used).
+- /topic, /persistant, /priority and /ownwinlist now save to game.conf
+  automatically — no separate /save needed.
+- Inactivity disconnection: default lowered to 10 minutes out of game,
+  applies to everyone (chanops included), and the player now gets an
+  explicit "You have been disconnected due to inactivity." message.
+- The deadline for admin-account nicknames to authenticate with /op was
+  reduced from 60 to 25 seconds.
+- /ban now requires a reason (shown to the target, the channel and
+  /banlist) and rejects the command without one.
+- /password rejects passwords outside 6-11 characters with a clear
+  message instead of silently truncating them.
+- The kick-cooldown rejection now says exactly how long is left
+  ("Try again in 4 minutes.") instead of "a few minutes".
+- Pause/unpause is accepted from any playing member, not only the
+  chanop (the bundled client still only offers the button to the game
+  moderator).
+- Using /kick while it's disabled in game.conf now answers "You do NOT
+  have access to that command!" instead of the confusing
+  "Invalid /COMMAND!".
+- Nicer output formatting: /whois with bold labels and "No Team" instead
+  of a blank, /banlist as aligned two-line blocks per ban, and /list
+  with the priority column zero-padded.
 
 _________________________________________________________________________________
 

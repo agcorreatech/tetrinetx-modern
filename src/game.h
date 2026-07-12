@@ -18,10 +18,19 @@ void init_game(void);
 
 /* Updates a current entry, or creates a new entry with score */
 void updatewinlist(char *name, char status, int score);
+void updatewinlist_in(struct winlist_t *wl, char *name, char status, int score);
 
 
 /* Initialise Winlist structure */
 void init_winlist(void);
+void init_winlist_array(struct winlist_t *wl);
+
+/* Per-channel winlists (channels flagged own_winlist=1): each keeps its
+   own game.winlist.<name> file, entirely separate from the global winlist.
+   The extended stats + CSV export remain GLOBAL-winlist-only. */
+void channel_winlist_filename(struct channel_t *chan, char *buf, int bufsize);
+void read_channel_winlist(struct channel_t *chan);
+void write_channel_winlist(struct channel_t *chan);
 
 /* Read Winlist, from winlist file */
 void readwinlist(void);
@@ -75,3 +84,4 @@ char remove_ban(char type, char *target);
    across a full server restart -- see CHANGELOG for the rationale). */
 void add_kick_cooldown(char *nick, char *channel_name, time_t expires);
 char is_kick_cooldown_active(char *nick, char *channel_name);
+int kick_cooldown_secs_left(char *nick, char *channel_name);
