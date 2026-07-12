@@ -49,10 +49,14 @@ void strip_colour_codes(char *src, char *dest);
    average level. Entirely separate from the original winlist above -- the
    in-game/protocol-facing winlist is never affected by any of this. */
 void init_winliststats(void);
+void init_winliststats_array(struct winliststats_t *stats);
 void readwinliststats(void);
 void writewinliststats(void);
 void updatewinliststats(char *name, char status, int level_reached);
+void updatewinliststats_in(struct winliststats_t *stats, char *name, char status, int level_reached);
 int find_winliststats(char *name, char status);
+int find_winliststats_in(struct winliststats_t *stats, char *name, char status);
+void writewinlisttxt_to(char *csvname, struct winlist_t *wl, struct winliststats_t *stats);
 
 /* Plain-text CSV export of the winlist (+ extended metrics where available).
    Called automatically from writewinlist(); gated by game.winlist_export_txt. */

@@ -33,8 +33,21 @@ so each section starts from a clean slate unless it says otherwise.
       (default channel, topic "Server Lobby", priority 1 — created
       automatically together with `#1x1` when `game.conf` defines no
       channels).
-- [ ] Run `/list`. **Expected:** `#lobby` (priority 1) and `#1x1`
-      (priority 2, max **2** players, topic "Game 1x1") are both listed.
+- [ ] Run `/list`. **Expected:** four default rooms — `#lobby`
+      (priority 01, "Server Lobby"), `#1x1` (priority 30, max **2**,
+      "Game 1x1"), `#sudden` (priority 31, "Sudden Death") and
+      `#sudden1x1` (priority 32, max **2**, "1x1 Sudden Death"). Lobby
+      variants (`#lobby1`, ...) get priorities 02, 03, ... following
+      their names.
+- [ ] On connecting (and on every channel change), confirm the player is
+      told what the room scores on: `#lobby` shows "This channel scores
+      on the GLOBAL winlist."; `#1x1`/`#sudden`/`#sudden1x1` show "This
+      channel has its OWN winlist (see /winlist)." (all three default to
+      their own winlists).
+- [ ] Start a game in `#sudden` (or `#sudden1x1`) and keep playing.
+      **Expected:** sudden death arms automatically ~2 minutes in
+      (`sd_timeout=120` by default in these rooms): the SUDDEN DEATH
+      message appears and the server starts adding lines.
 - [ ] Fill `#lobby` to its 6 players, then connect a 7th client.
       **Expected:** the 7th player lands in `#lobby1` (created
       automatically) — NEVER in `#1x1` or any other game room, even with
@@ -432,3 +445,18 @@ As an authenticated admin, in `#1x1` (or any channel):
       `game.conf` block no longer carries `own_winlist=1`.
 - [ ] As a non-admin, `/ownwinlist 1` — **expected:** "You do NOT have
       access to that command!".
+- [ ] `/ownwinlist 2` (no winlist at all) in some room — **expected:**
+      "Channel #x now scores on NO winlist.", players entering the room
+      are told "This channel does NOT score on any winlist.", winning a
+      game there adds points NOWHERE (no global change, no channel file,
+      no CSV), `/winlists` lists the room as "scores on no winlist", and
+      `/clear #x` answers "does not score on any winlist - nothing to
+      clear".
+- [ ] `/winlist` with no selector — **expected:** one block per winlist:
+      "Global Winlist (top 10)" first, then "Channel #1x1 Winlist",
+      "Channel #sudden Winlist", etc., with "(empty)" under headers of
+      winlists that have no entries yet.
+- [ ] With `winlist_export_txt=1`, win a game in an own-winlist room and
+      confirm `game.winlist.<name>.csv` is written with the SAME columns
+      as the global CSV (rank,type,name,score,wins,last_win,best_level,
+      avg_level), and that its wins/levels track that room only.

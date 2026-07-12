@@ -786,8 +786,9 @@ int gamewrite(void)
     fprintf(file_out,"#  priority=50    # Ordering weight shown in /list. New connections always\n");
     fprintf(file_out,"#                 # land in a lobby room (main_channel_name, lobby1, ...),\n");
     fprintf(file_out,"#                 # so priority does NOT steer connect placement.\n");
-    fprintf(file_out,"#  own_winlist=1  # Channel keeps its OWN winlist (file game.winlist.<name>)\n");
-    fprintf(file_out,"#                 # instead of the server-wide global one (see /ownwinlist)\n");
+    fprintf(file_out,"#  own_winlist=1  # What the channel's games score on (see /ownwinlist):\n");
+    fprintf(file_out,"#                 # 0 = the global winlist (default), 1 = the channel's OWN\n");
+    fprintf(file_out,"#                 # winlist (file game.winlist.<name>), 2 = NO winlist at all\n");
     fprintf(file_out,"#  block_halfcross=12 #etc... any of the default options here\n");
     fprintf(file_out,"#\n");
     /* Now write any persistant channel info */
@@ -800,7 +801,7 @@ int gamewrite(void)
             fprintf(file_out,"maxplayers=%d\n",chan->maxplayers);
             fprintf(file_out,"topic=%s\n",chan->description);
             fprintf(file_out,"priority=%d\n",chan->priority);
-            if (chan->own_winlist) fprintf(file_out,"own_winlist=1\n");
+            if (chan->own_winlist) fprintf(file_out,"own_winlist=%d\n",chan->own_winlist);
             
             if (chan->starting_level!=game.starting_level) fprintf(file_out,"starting_level=%d\n",chan->starting_level);
             if (chan->lines_per_level!=game.lines_per_level) fprintf(file_out,"lines_per_level=%d\n",chan->lines_per_level);
@@ -926,8 +927,9 @@ int gameread(void)
                     chan->maxplayers=DEFAULTMAXPLAYERS;
                     chan->status=STATE_ONLINE;
                     chan->description[0]=0;
-                    chan->own_winlist=0;
+                    chan->own_winlist=WINLIST_GLOBAL;
                     init_winlist_array(chan->winlist);
+                    init_winliststats_array(chan->winliststats);
                     chan->priority=DEFAULTPRIORITY;
                     chan->sd_mode=SD_NONE;
                     chan->persistant=1;
@@ -998,8 +1000,10 @@ int gameread(void)
               {
                 if (chan!=NULL)
                   {
-                    chan->own_winlist=(atoi(id_value)!=0);
-                    if (chan->own_winlist)
+                    chan->own_winlist=atoi(id_value);
+                    if ( (chan->own_winlist < WINLIST_GLOBAL) || (chan->own_winlist > WINLIST_NONE) )
+                      chan->own_winlist=WINLIST_GLOBAL;
+                    if (chan->own_winlist==WINLIST_OWN)
                       read_channel_winlist(chan);
                   }
                 error=0;
@@ -1426,14 +1430,19 @@ int gameread(void)
    create_default_channels() below can use it. */
 struct channel_t *create_channel(char *name, char persistant);
 
-/* create_default_channels() - Seeds the two default rooms used when
+/* create_default_channels() - Seeds the default rooms used when
    game.conf defines no [channel] blocks at all:
      #lobby (game.main_channel_name) - topic "Server Lobby", priority 1:
        the room players land in when they connect (new connections always
-       land in a lobby variant; game rooms are joined with /join).
-     #1x1 - 2 players max, topic "Game 1x1", priority 2 (priority only
-       orders the /list display).
-   Both are persistent presets, so /save writes them into game.conf. */
+       land in a lobby variant, which get priorities 2, 3, ... following
+       their names; game rooms are joined with /join).
+     #1x1       - 2 players max, "Game 1x1", priority 30, own winlist.
+     #sudden    - "Sudden Death", priority 31, sudden death on by
+                  default (sd_timeout=120), own winlist.
+     #sudden1x1 - 2 players max, "1x1 Sudden Death", priority 32, sudden
+                  death on by default, own winlist.
+   (priority only orders the /list display.) All are persistent presets,
+   so they are written into game.conf. */
 void create_default_channels(void)
   {
     struct channel_t *chan;
@@ -1450,7 +1459,30 @@ void create_default_channels(void)
       {
         chan->maxplayers=2;
         strncpy(chan->description,"Game 1x1",DESCRIPTIONLEN-1); chan->description[DESCRIPTIONLEN-1]=0;
-        chan->priority=2;
+        chan->priority=30;
+        chan->own_winlist=WINLIST_OWN;
+        read_channel_winlist(chan);
+      }
+
+    chan = create_channel("sudden", 1);
+    if (chan != NULL)
+      {
+        strncpy(chan->description,"Sudden Death",DESCRIPTIONLEN-1); chan->description[DESCRIPTIONLEN-1]=0;
+        chan->priority=31;
+        chan->sd_timeout=120;	/* sudden death arms 2 minutes into every game */
+        chan->own_winlist=WINLIST_OWN;
+        read_channel_winlist(chan);
+      }
+
+    chan = create_channel("sudden1x1", 1);
+    if (chan != NULL)
+      {
+        chan->maxplayers=2;
+        strncpy(chan->description,"1x1 Sudden Death",DESCRIPTIONLEN-1); chan->description[DESCRIPTIONLEN-1]=0;
+        chan->priority=32;
+        chan->sd_timeout=120;	/* sudden death arms 2 minutes into every game */
+        chan->own_winlist=WINLIST_OWN;
+        read_channel_winlist(chan);
       }
 
     lvprintf(1,"No channels configured -- created default channels #%s and #1x1\n", game.main_channel_name);
@@ -1616,45 +1648,78 @@ void channel_winlist_filename(struct channel_t *chan, char *buf, int bufsize)
     buf[j]=0;
   }
 
-/* read_channel_winlist(chan) - Loads a channel's own winlist from disk
-   (game.winlist.<name>) into chan->winlist. Missing file = fresh empty
-   winlist (first time the channel goes own_winlist). */
+/* read_channel_winlist(chan) - Loads a channel's own winlist AND its
+   extended stats from disk (game.winlist.<name> +
+   game.winliststats.<name>) into chan->winlist / chan->winliststats.
+   Missing files = fresh empty winlist (first time the channel goes
+   own_winlist). */
 void read_channel_winlist(struct channel_t *chan)
   {
     int i;
     FILE *file_in;
-    char fname[256];
+    char fname[300];
 
     init_winlist_array(chan->winlist);
+    init_winliststats_array(chan->winliststats);
 
-    channel_winlist_filename(chan, fname, sizeof(fname));
+    channel_winlist_filename(chan, fname, sizeof(fname)-16);
     file_in = fopen(fname,"r");
-    if (file_in == NULL) return;
-
-    for(i=0;i<MAXWINLIST;i++)
+    if (file_in != NULL)
       {
-        if (fread(&chan->winlist[i], sizeof(struct winlist_t), 1, file_in) != 1)
-          break;
+        for(i=0;i<MAXWINLIST;i++)
+          {
+            if (fread(&chan->winlist[i], sizeof(struct winlist_t), 1, file_in) != 1)
+              break;
+          }
+        fclose(file_in);
       }
-    fclose(file_in);
+
+    strcat(fname, ".stats");
+    file_in = fopen(fname,"r");
+    if (file_in != NULL)
+      {
+        for(i=0;i<MAXWINLISTSTATS;i++)
+          {
+            if (fread(&chan->winliststats[i], sizeof(struct winliststats_t), 1, file_in) != 1)
+              break;
+          }
+        fclose(file_in);
+      }
   }
 
 /* write_channel_winlist(chan) - Writes a channel's own winlist out to
-   game.winlist.<name> (same binary array format as game.winlist) */
+   game.winlist.<name> (same binary array format as game.winlist), its
+   extended stats to game.winlist.<name>.stats, and -- when the CSV
+   export is enabled -- the same CSV export the global winlist gets, to
+   game.winlist.<name>.csv. */
 void write_channel_winlist(struct channel_t *chan)
   {
     int i;
     FILE *file_out;
-    char fname[256];
+    char fname[300];
 
-    channel_winlist_filename(chan, fname, sizeof(fname));
+    channel_winlist_filename(chan, fname, sizeof(fname)-16);
     file_out = fopen(fname, "w");
-    if (file_out == NULL) return;
+    if (file_out != NULL)
+      {
+        for(i=0;i<MAXWINLIST;i++)
+          fwrite(&chan->winlist[i], sizeof(struct winlist_t), 1, file_out);
+        fclose(file_out);
+      }
 
-    for(i=0;i<MAXWINLIST;i++)
-      fwrite(&chan->winlist[i], sizeof(struct winlist_t), 1, file_out);
+    strcat(fname, ".stats");
+    file_out = fopen(fname, "w");
+    if (file_out != NULL)
+      {
+        for(i=0;i<MAXWINLISTSTATS;i++)
+          fwrite(&chan->winliststats[i], sizeof(struct winliststats_t), 1, file_out);
+        fclose(file_out);
+      }
 
-    fclose(file_out);
+    /* game.winlist.<name>.csv -- same columns as the global export */
+    channel_winlist_filename(chan, fname, sizeof(fname)-16);
+    strcat(fname, ".csv");
+    writewinlisttxt_to(fname, chan->winlist, chan->winliststats);
   }
 
 /* Read Winlist structure from game.winlist */
@@ -1727,12 +1792,19 @@ void writewinlist(void)
 /* through the plain-text CSV export (writewinlisttxt(), below).         */
 /* --------------------------------------------------------------------- */
 
-/* init_winliststats() - Clears the in-memory extended stats */
-void init_winliststats(void)
+/* init_winliststats_array(stats) - Clears any MAXWINLISTSTATS-sized
+   extended-stats array (the global one or a channel's own) */
+void init_winliststats_array(struct winliststats_t *stats)
   {
     int i;
     for (i=0; i<MAXWINLISTSTATS; i++)
-      winliststats[i].inuse = 0;
+      stats[i].inuse = 0;
+  }
+
+/* init_winliststats() - Clears the GLOBAL in-memory extended stats */
+void init_winliststats(void)
+  {
+    init_winliststats_array(winliststats);
   }
 
 /* readwinliststats() - Reads game.winliststats (same binary-array style */
@@ -1772,61 +1844,76 @@ void writewinliststats(void)
     fclose(file_out);
   }
 
-/* find_winliststats(name, status) - Returns the index of the matching */
-/*   entry (same name+status key as winlist_t), or -1 if not found */
-int find_winliststats(char *name, char status)
+/* find_winliststats_in(stats, name, status) - Returns the index of the */
+/*   matching entry (same name+status key as winlist_t) in the given */
+/*   stats array, or -1 if not found */
+int find_winliststats_in(struct winliststats_t *stats, char *name, char status)
   {
     int i;
     for (i=0; i<MAXWINLISTSTATS; i++)
-      if ( winliststats[i].inuse && (winliststats[i].status==status) && !strcasecmp(winliststats[i].name,name) )
+      if ( stats[i].inuse && (stats[i].status==status) && !strcasecmp(stats[i].name,name) )
         return i;
     return -1;
   }
 
-/* updatewinliststats(name, status, level_reached) - Records one more */
-/*   victory for this name/status: bumps the win count, updates the last */
-/*   win timestamp, tracks the best level reached, and accumulates the */
-/*   level sum (used to compute the average level at export time). */
-/*   Called alongside updatewinlist() at the exact same call sites (end of */
-/*   game, when a winner is declared) -- never instead of it. */
-void updatewinliststats(char *name, char status, int level_reached)
+/* find_winliststats(name, status) - Same, on the GLOBAL stats */
+int find_winliststats(char *name, char status)
+  {
+    return find_winliststats_in(winliststats, name, status);
+  }
+
+/* updatewinliststats_in(stats, name, status, level_reached) - Records one */
+/*   more victory for this name/status in the given stats array: bumps the */
+/*   win count, updates the last win timestamp, tracks the best level */
+/*   reached, and accumulates the level sum (used to compute the average */
+/*   level at export time). Persisting is the CALLER's job. */
+void updatewinliststats_in(struct winliststats_t *stats, char *name, char status, int level_reached)
   {
     int i;
 
-    i = find_winliststats(name, status);
+    i = find_winliststats_in(stats, name, status);
     if (i == -1)
       {
-        for (i=0; (i<MAXWINLISTSTATS) && winliststats[i].inuse; i++)
+        for (i=0; (i<MAXWINLISTSTATS) && stats[i].inuse; i++)
           ; /* find first free slot */
         if (i == MAXWINLISTSTATS)
           {
             lvprintf(1,"WARNING: Winlist stats table full (MAXWINLISTSTATS=%d), could not track stats for '%s'\n", MAXWINLISTSTATS, name);
             return;
           }
-        winliststats[i].inuse = 1;
-        strncpy(winliststats[i].name, name, NICKLEN); winliststats[i].name[NICKLEN]=0;
-        winliststats[i].status = status;
-        winliststats[i].wins = 0;
-        winliststats[i].best_level = 0;
-        winliststats[i].level_sum = 0;
+        stats[i].inuse = 1;
+        strncpy(stats[i].name, name, NICKLEN); stats[i].name[NICKLEN]=0;
+        stats[i].status = status;
+        stats[i].wins = 0;
+        stats[i].best_level = 0;
+        stats[i].level_sum = 0;
       }
 
-    winliststats[i].wins++;
-    winliststats[i].last_win = time(NULL);
-    winliststats[i].level_sum += level_reached;
-    if (level_reached > winliststats[i].best_level)
-      winliststats[i].best_level = level_reached;
+    stats[i].wins++;
+    stats[i].last_win = time(NULL);
+    stats[i].level_sum += level_reached;
+    if (level_reached > stats[i].best_level)
+      stats[i].best_level = level_reached;
+  }
 
+/* updatewinliststats(name, status, level_reached) - Same, on the GLOBAL */
+/*   stats (persisted immediately). Called alongside updatewinlist() at */
+/*   the exact same call sites -- never instead of it. */
+void updatewinliststats(char *name, char status, int level_reached)
+  {
+    updatewinliststats_in(winliststats, name, status, level_reached);
     writewinliststats();
   }
 
-/* writewinlisttxt() - Exports the winlist (+ extended metrics where */
-/*   available) to a plain-text CSV file (FILE_WINLIST_TXT), e.g. for a */
-/*   webpage to display. Gated by game.winlist_export_txt (game.conf). */
-/*   NOTE: the in-game winlist itself (struct winlist_t, /winlist command, */
-/*   TetriNET client display) is completely unaffected -- this only ever */
-/*   produces an additional, separate export file. */
-void writewinlisttxt(void)
+/* writewinlisttxt_to(csvname, wl, stats) - Exports the given winlist */
+/*   (+ its extended metrics where available) to a plain-text CSV file, */
+/*   e.g. for a webpage to display. Gated by game.winlist_export_txt */
+/*   (game.conf). Used for the global winlist AND for every channel's own */
+/*   winlist (each channel exports to game.winlist.<name>.csv with the */
+/*   exact same columns). NOTE: the in-game winlist itself (struct */
+/*   winlist_t, /winlist command, TetriNET client display) is completely */
+/*   unaffected -- this only ever produces additional, separate files. */
+void writewinlisttxt_to(char *csvname, struct winlist_t *wl, struct winliststats_t *stats)
   {
     FILE *file_out;
     int i, j, rank;
@@ -1836,7 +1923,7 @@ void writewinlisttxt(void)
 
     if (!game.winlist_export_txt) return;
 
-    file_out = fopen(FILE_WINLIST_TXT, "w");
+    file_out = fopen(csvname, "w");
     if (file_out == NULL) return;
 
     fprintf(file_out, "rank,type,name,score,wins,last_win,best_level,avg_level\n");
@@ -1844,24 +1931,24 @@ void writewinlisttxt(void)
     rank = 1;
     for (i=0; i<MAXWINLIST; i++)
       {
-        if (winlist[i].inuse)
+        if (wl[i].inuse)
           {
-            strip_colour_codes(winlist[i].name, name_clean);
-            j = find_winliststats(name_clean, winlist[i].status);
+            strip_colour_codes(wl[i].name, name_clean);
+            j = find_winliststats_in(stats, name_clean, wl[i].status);
 
-            if ( (j>=0) && (winliststats[j].wins>0) )
+            if ( (j>=0) && (stats[j].wins>0) )
               {
-                tm_info = localtime(&winliststats[j].last_win);
+                tm_info = localtime(&stats[j].last_win);
                 strftime(when_str, sizeof(when_str), "%Y-%m-%d %H:%M:%S", tm_info);
                 fprintf(file_out, "%d,%s,\"%s\",%lu,%lu,%s,%d,%.2f\n",
                         rank,
-                        (winlist[i].status=='t' ? "team" : "player"),
+                        (wl[i].status=='t' ? "team" : "player"),
                         name_clean,
-                        winlist[i].score,
-                        winliststats[j].wins,
+                        wl[i].score,
+                        stats[j].wins,
                         when_str,
-                        winliststats[j].best_level,
-                        (double)winliststats[j].level_sum / (double)winliststats[j].wins);
+                        stats[j].best_level,
+                        (double)stats[j].level_sum / (double)stats[j].wins);
               }
             else
               {
@@ -1869,13 +1956,19 @@ void writewinlisttxt(void)
                    feature, or hasn't won again since upgrading) -- leave the
                    extra columns blank rather than guessing. */
                 fprintf(file_out, "%d,%s,\"%s\",%lu,,,,\n",
-                        rank, (winlist[i].status=='t' ? "team" : "player"), name_clean, winlist[i].score);
+                        rank, (wl[i].status=='t' ? "team" : "player"), name_clean, wl[i].score);
               }
             rank++;
           }
       }
 
     fclose(file_out);
+  }
+
+/* writewinlisttxt() - Same, for the GLOBAL winlist (game.winlist.csv) */
+void writewinlisttxt(void)
+  {
+    writewinlisttxt_to(FILE_WINLIST_TXT, winlist, winliststats);
   }
   
 /* updatewinlist(team/player name, team or player?, score to add) */
@@ -1988,8 +2081,9 @@ void strip_colour_codes(char *src, char *dest)
   }
 
 /* Send winlist top10 to playernum (-1 = all). Uses the channel's
-   EFFECTIVE winlist: its own one when own_winlist=1, the global one
-   otherwise. */
+   EFFECTIVE winlist: its own one when own_winlist=WINLIST_OWN, none at
+   all (an empty winlist packet, clearing the client's display) for
+   WINLIST_NONE, the global one otherwise. */
 void sendwinlist(struct channel_t *chan,struct net_t *n)
   {
     int j;
@@ -1997,7 +2091,12 @@ void sendwinlist(struct channel_t *chan,struct net_t *n)
     struct net_t *nsock;
     struct winlist_t *wl;
 
-    wl = (chan->own_winlist) ? chan->winlist : winlist;
+    if (chan->own_winlist==WINLIST_OWN)
+      wl = chan->winlist;
+    else if (chan->own_winlist==WINLIST_NONE)
+      wl = NULL;
+    else
+      wl = winlist;
 
     if (n==NULL)
       nsock=chan->net;
@@ -2009,7 +2108,7 @@ void sendwinlist(struct channel_t *chan,struct net_t *n)
         if ( ( (nsock->type == NET_CONNECTED)|| (nsock->type == NET_WAITINGFORTEAM)) )
           {
             tprintf(nsock->sock,"winlist");
-            for(j=0;j<10;j++)
+            for(j=0; (wl!=NULL) && (j<10); j++)
               {
                 if (wl[j].inuse)
                   {

@@ -174,6 +174,25 @@ Maintainer / Developer: Alexandro G. Corrêa <alex.linux@gmail.com>
 - Nicer output formatting: /whois with bold labels and "No Team" instead
   of a blank, /banlist as aligned two-line blocks per ban, and /list
   with the priority column zero-padded.
+- Two more default rooms on a fresh install: #sudden ("Sudden Death")
+  and #sudden1x1 (2 players, "1x1 Sudden Death"), both with sudden
+  death armed by default (2 minutes into every game). Default /list
+  priorities: lobby rooms count up from 01 following their names
+  (lobby=01, lobby1=02, ...), #1x1=30, #sudden=31, #sudden1x1=32.
+- #1x1, #sudden and #sudden1x1 keep their OWN winlists by default
+  instead of scoring on the global one; every winlist (global and
+  per-channel) is exported to its own CSV file with the same columns
+  (game.winlist.csv / game.winlist.<name>.csv), including the extended
+  stats, which are now tracked per channel winlist too.
+- A channel can also be set to score on NO winlist at all
+  (/ownwinlist 2, or own_winlist=2 in game.conf) — wins there count
+  nowhere and produce no CSV.
+- On entering any room the player is told what it scores on: the global
+  winlist, the room's own winlist, or no winlist at all.
+- /winlist [n] with no other argument now shows the top n of EVERY
+  winlist on the server (Global first, then each channel's own), one
+  block per winlist; /winlist [n] <#channel|global> still narrows it to
+  a single one.
 
 _________________________________________________________________________________
 

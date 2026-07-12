@@ -371,7 +371,7 @@ struct help_entry_t help_table[] = {
   /* --- Channel admin commands --- */
   { "/priority <1-99>",              "Changes channel order in the list",          NULL,                     can_use_priority, HELP_SECTION_CHANADMIN },
   { "/persistant <0/1>",             "Makes a channel persistant",                 &game.command_persistant, NULL, HELP_SECTION_CHANADMIN },
-  { "/ownwinlist <0/1>",             "Channel keeps its own winlist",              NULL,                     NULL, HELP_SECTION_CHANADMIN },
+  { "/ownwinlist <0/1/2>",           "Channel winlist: global/own/none",           NULL,                     NULL, HELP_SECTION_CHANADMIN },
   { "/save",                        "Saves game config and persistant channels",  &game.command_save,       NULL, HELP_SECTION_CHANADMIN },
 
   /* --- Server admin commands --- */
@@ -412,8 +412,9 @@ struct channel_t *create_channel(char *name, char persistant)
     chan->maxplayers = DEFAULTMAXPLAYERS;
     chan->status = STATE_ONLINE;
     chan->description[0] = 0;
-    chan->own_winlist = 0;
+    chan->own_winlist = WINLIST_GLOBAL;
     init_winlist_array(chan->winlist);
+    init_winliststats_array(chan->winliststats);
     chan->priority = DEFAULTPRIORITY;
     chan->sd_mode = SD_NONE;
     chan->persistant = persistant;
@@ -496,12 +497,63 @@ struct channel_t *find_or_create_lobby_channel(struct channel_t *exclude_chan)
           {
             if (numchannels() >= game.maxchannels)
               break;
-            return create_channel(candidate_name, 1);
+            chan = create_channel(candidate_name, 1);
+            if (chan != NULL)
+              chan->priority = suffix + 1;   /* lobby=1, lobby1=2, lobby2=3, ... */
+            return chan;
           }
       }
 
     lvprintf(1,"WARNING: No lobby variant available (maxchannels reached)\n");
     return NULL;
+  }
+
+/* announce_channel_winlist_mode(n) - Tells a player which winlist the
+   channel they just entered scores on (global / its own / none at all).
+   Sent on every join path: connect placement, /join, and kick/moves. */
+void announce_channel_winlist_mode(struct net_t *n)
+  {
+    if (n->channel->own_winlist==WINLIST_NONE)
+      tprintf(n->sock,"pline 0 %cThis channel does NOT score on any winlist.\xff", NAVY);
+    else if (n->channel->own_winlist==WINLIST_OWN)
+      tprintf(n->sock,"pline 0 %cThis channel has its OWN winlist (see /winlist).\xff", NAVY);
+    else
+      tprintf(n->sock,"pline 0 %cThis channel scores on the GLOBAL winlist.\xff", NAVY);
+  }
+
+/* print_winlist_to(n, wl, wchan, count) - Sends one winlist's top 'count'
+   entries to n's partyline, headed by which winlist it is (wchan==NULL
+   means the global one). Used by /winlist, which shows EVERY winlist on
+   the server when no specific one is asked for. */
+void print_winlist_to(struct net_t *n, struct winlist_t *wl, struct channel_t *wchan, int count)
+  {
+    int i,k;
+
+    if (wchan!=NULL)
+      tprintf(n->sock,"pline 0 %c%cChannel #%s Winlist%c (top %d)\xff", BOLD, BLUE, wchan->name, BOLD, count);
+    else
+      tprintf(n->sock,"pline 0 %c%cGlobal Winlist%c (top %d)\xff", BOLD, BLUE, BOLD, count);
+
+    if (!wl[0].inuse)
+      {
+        tprintf(n->sock,"pline 0   %c(empty)\xff", DARKGRAY);
+        return;
+      }
+    i=0;
+    while ( (i < count) && (wl[i].inuse) )
+      {
+        if (wl[i].status == 't')
+          {
+            k = (!strcmp(n->team, wl[i].name)) ? RED : BLACK;
+            tprintf(n->sock,"pline 0 %c%d. %4lu - Team %s\xff", k, i+1, wl[i].score, wl[i].name);
+          }
+        else
+          {
+            k = (!strcmp(n->nick, wl[i].name)) ? RED : BLACK;
+            tprintf(n->sock,"pline 0 %c%d. %4lu - Player %s\xff", k, i+1, wl[i].score, wl[i].name);
+          }
+        i++;
+      }
   }
 
 /* end_game_for_leaver(chan, leaver, declare_winner) - Ends chan's game
@@ -539,13 +591,18 @@ void end_game_for_leaver(struct channel_t *chan, struct net_t *leaver, char decl
 
     if (ns1!=NULL)
       { /* Score the win, same as the normal endgame path. Channels with
-           their own winlist score there (no global stats/CSV); everyone
-           else scores on the global winlist as always. */
-        if (chan->own_winlist)
+           their own winlist score there (own stats + own CSV); channels
+           with NO winlist score nowhere; everyone else scores on the
+           global winlist as always. */
+        if (chan->own_winlist==WINLIST_OWN)
           {
             updatewinlist_in(chan->winlist, (strlen(ns1->team)>0) ? ns1->team : ns1->nick,
                              (strlen(ns1->team)>0) ? 't' : 'p', 3);
+            updatewinliststats_in(chan->winliststats, (strlen(ns1->team)>0) ? ns1->team : ns1->nick,
+                                  (strlen(ns1->team)>0) ? 't' : 'p', ns1->level);
           }
+        else if (chan->own_winlist==WINLIST_NONE)
+          { /* This channel scores on no winlist at all */ }
         else if (strlen(ns1->team) > 0)
           { updatewinlist(ns1->team,'t',3); updatewinliststats(ns1->team,'t',ns1->level); }
         else
@@ -595,9 +652,9 @@ void end_game_for_leaver(struct channel_t *chan, struct net_t *leaver, char decl
       }
     if (ns1!=NULL)
       {
-        if (chan->own_winlist)
+        if (chan->own_winlist==WINLIST_OWN)
           write_channel_winlist(chan);
-        else
+        else if (chan->own_winlist==WINLIST_GLOBAL)
           writewinlist();
       }
   }
@@ -697,6 +754,8 @@ void move_player_to_channel(struct net_t *n, struct channel_t *new_chan, char ma
       }
 
     tprintf(n->sock, "playernum %d\xff", n->gameslot);
+    announce_channel_winlist_mode(n);
+    sendwinlist(new_chan, n);   /* refresh the client's winlist display for the new room */
 
     if ( (new_chan->status == STATE_INGAME) || (new_chan->status == STATE_PAUSED) )
       {
@@ -1972,8 +2031,9 @@ void net_connected(struct net_t *n, char *buf)
                                     chan->maxplayers=DEFAULTMAXPLAYERS;
                                     chan->status=STATE_ONLINE;
                                     chan->description[0]=0;
-                                    chan->own_winlist=0;
+                                    chan->own_winlist=WINLIST_GLOBAL;
                                     init_winlist_array(chan->winlist);
+                                    init_winliststats_array(chan->winliststats);
                                     chan->priority=DEFAULTPRIORITY;
                                     chan->sd_mode=SD_NONE;
                                     chan->persistant=0;
@@ -2144,10 +2204,15 @@ void net_connected(struct net_t *n, char *buf)
                                 if ( (n->channel->status == STATE_INGAME) || (n->channel->status == STATE_PAUSED) )
                                   tprintf(n->sock,"ingame\xff");
                           
-                                /* If we are currently paused, kindly let them know that fact to */ 
+                                /* If we are currently paused, kindly let them know that fact to */
                                 if ( n->channel->status == STATE_PAUSED )
                                   tprintf(n->sock,"pause 1\xff");
-                                                                               
+
+                                /* Tell them what this room's games score on,
+                                   and refresh their winlist display for it */
+                                announce_channel_winlist_mode(n);
+                                sendwinlist(n->channel, n);
+
                                 /* If 1 or less players/teams now are playing, AND the player that
                                    quit WAS playing (snapshotted in 'l' above, since n->status is
                                    already STAT_NOTPLAYING by this point), end the game -- declaring
@@ -2243,7 +2308,9 @@ void net_connected(struct net_t *n, char *buf)
                               chan=chan->next;
                             if (chan==NULL)
                               tprintf(n->sock,"pline 0 %cNo such channel: %s\xff", RED, STRG);
-                            else if (!chan->own_winlist)
+                            else if (chan->own_winlist==WINLIST_NONE)
+                              tprintf(n->sock,"pline 0 %cChannel #%s does not score on any winlist - nothing to clear.\xff", RED, chan->name);
+                            else if (chan->own_winlist!=WINLIST_OWN)
                               tprintf(n->sock,"pline 0 %cChannel #%s uses the global winlist (see /winlists). Use /clear global.\xff", RED, chan->name);
                             else
                               {
@@ -2501,11 +2568,11 @@ void net_connected(struct net_t *n, char *buf)
                   }
 
                 /* Winlist. Display the top X people - Suggestion by crazor.
-                   Now takes an optional winlist selector (channels can keep
-                   their own): /winlist [n] [#channel|global]. Defaults to
-                   the winlist the CURRENT channel actually plays for.
-                   Boundary check on MSG[8] so "/winlists" (below) doesn't
-                   also match this prefix. */
+                   /winlist [n] now shows the top n of EVERY winlist on the
+                   server (the global one plus each channel's own), one block
+                   per winlist; an explicit selector (#channel or global)
+                   narrows it to just that one. Boundary check on MSG[8] so
+                   "/winlists" (below) doesn't also match this prefix. */
                 if ( !strncasecmp(MSG, "/winlist", 8) && (MSG[8]=='\0' || MSG[8]==' ') && (game.command_winlist>0) )
                   {
                     valid_param=2;
@@ -2513,12 +2580,12 @@ void net_connected(struct net_t *n, char *buf)
                       {
                         struct winlist_t *wl;
                         struct channel_t *wchan;
-                        char wl_bad;
+                        char wl_bad, wl_selected;
 
-                        /* Default: the winlist this channel plays for */
-                        wchan = n->channel;
-                        wl = (wchan->own_winlist) ? wchan->winlist : winlist;
+                        wchan = NULL;
+                        wl = winlist;
                         wl_bad = 0;
+                        wl_selected = 0;
                         j = 10;
 
                         P = (strlen(MSG) >= 9) ? MSG+9 : (char *)"";
@@ -2534,43 +2601,39 @@ void net_connected(struct net_t *n, char *buf)
                                   chan=chan->next;
                                 if (chan==NULL)
                                   { tprintf(n->sock,"pline 0 %cNo such channel: %s\xff", RED, wl_arg); wl_bad=1; }
+                                else if (chan->own_winlist==WINLIST_NONE)
+                                  { tprintf(n->sock,"pline 0 %cChannel #%s does not score on any winlist.\xff", RED, chan->name); wl_bad=1; }
+                                else if (chan->own_winlist==WINLIST_OWN)
+                                  { wchan=chan; wl=chan->winlist; wl_selected=1; }
                                 else
-                                  { wchan=chan; wl=(chan->own_winlist)?chan->winlist:winlist; }
+                                  { wchan=NULL; wl=winlist; wl_selected=1; } /* scores on the global one */
                               }
                             else if (!strcasecmp(wl_arg,"global"))
-                              { wchan=NULL; wl=winlist; }
+                              { wchan=NULL; wl=winlist; wl_selected=1; }
                             else if (atoi(wl_arg)>0)
                               j=atoi(wl_arg);
                             else
                               { tprintf(n->sock,"pline 0 %cUsage: /winlist [n] [#channel|global]\xff", RED); wl_bad=1; }
                           }
+                        if (j > MAXWINLIST) j = MAXWINLIST;
 
-                        if ( (!wl_bad) && (j >= 1) && (j <= MAXWINLIST) )
+                        if ( (!wl_bad) && (j >= 1) )
                           {
-                            i=0;
-                            if ( (wchan!=NULL) && wchan->own_winlist )
-                              tprintf(n->sock,"pline 0 %cTop %d Winlist of #%s\xff", BLUE, j, wchan->name);
+                            if (wl_selected)
+                              print_winlist_to(n, wl, wchan, j);
                             else
-                              tprintf(n->sock,"pline 0 %cTop %d Winlist\xff", BLUE, j);
-                            while ( (i < j) && (wl[i].inuse) )
-                              {
-                                if (wl[i].status == 't')
+                              { /* No selector: every winlist on the server */
+                                print_winlist_to(n, winlist, NULL, j);
+                                chan=chanlist;
+                                while (chan!=NULL)
                                   {
-                                    if (!strcmp(n->team, wl[i].name))
-                                      k = RED;
-                                    else
-                                      k = BLACK;
-                                    tprintf(n->sock,"pline 0 %c%d. %4lu - Team %s\xff", k, i+1, wl[i].score, wl[i].name);
+                                    if (chan->own_winlist==WINLIST_OWN)
+                                      {
+                                        tprintf(n->sock,"pline 0 \xff"); /* blank spacer line */
+                                        print_winlist_to(n, chan->winlist, chan, j);
+                                      }
+                                    chan=chan->next;
                                   }
-                                else
-                                  {
-                                    if (!strcmp(n->nick, wl[i].name))
-                                      k = RED;
-                                    else
-                                      k = BLACK;
-                                    tprintf(n->sock,"pline 0 %c%d. %4lu - Player %s\xff", k, i+1, wl[i].score, wl[i].name);
-                                  }
-                                i++;
                               }
                           }
                       }
@@ -2590,8 +2653,10 @@ void net_connected(struct net_t *n, char *buf)
                         chan=chanlist;
                         while (chan!=NULL)
                           {
-                            if (chan->own_winlist)
+                            if (chan->own_winlist==WINLIST_OWN)
                               tprintf(n->sock,"pline 0   %c#%s %c- channel winlist\xff", BLACK, chan->name, DARKGRAY);
+                            else if (chan->own_winlist==WINLIST_NONE)
+                              tprintf(n->sock,"pline 0   %c#%s %c- scores on no winlist\xff", BLACK, chan->name, DARKGRAY);
                             chan=chan->next;
                           }
                       }
@@ -2599,36 +2664,35 @@ void net_connected(struct net_t *n, char *buf)
                       tprintf(n->sock,"pline 0 %cYou do NOT have access to that command!\xff",RED);
                   }
 
-                /* /ownwinlist <0/1> - toggles a channel-specific winlist for
-                   the CURRENT channel (admin-only): 1 loads/creates
-                   game.winlist.<name> and scores/announces there from now
-                   on; 0 goes back to the global winlist. Auto-saved to
-                   game.conf like the other channel-admin commands. */
+                /* /ownwinlist <0/1/2> - sets what the CURRENT channel's games
+                   score on (admin-only): 0 = the global winlist, 1 = the
+                   channel's own winlist (loads/creates game.winlist.<name>),
+                   2 = no winlist at all. Auto-saved to game.conf like the
+                   other channel-admin commands. */
                 if ( !strncasecmp(MSG, "/ownwinlist", 11) )
                   {
                     valid_param=2;
                     if (passed_level(n,LEVEL_AUTHOP))
                       {
                         P = (strlen(MSG) >= 12) ? MSG+12 : (char *)"";
-                        if (*P=='1')
+                        if ( (*P=='0') || (*P=='1') || (*P=='2') )
                           {
-                            n->channel->own_winlist=1;
-                            read_channel_winlist(n->channel);
-                            tprintf(n->sock,"pline 0 %cChannel #%s now keeps its OWN winlist.\xff", NAVY, n->channel->name);
-                            lvprintf(4,"#%s-%s enabled the channel's own winlist\n",n->channel->name,n->nick);
-                            gamewrite(); /* auto-save: no separate /save needed */
-                            sendwinlist(n->channel,NULL);
-                          }
-                        else if (*P=='0')
-                          {
-                            n->channel->own_winlist=0;
-                            tprintf(n->sock,"pline 0 %cChannel #%s now uses the GLOBAL winlist.\xff", NAVY, n->channel->name);
-                            lvprintf(4,"#%s-%s disabled the channel's own winlist\n",n->channel->name,n->nick);
+                            n->channel->own_winlist = (*P) - '0';
+                            if (n->channel->own_winlist==WINLIST_OWN)
+                              {
+                                read_channel_winlist(n->channel);
+                                tprintf(n->sock,"pline 0 %cChannel #%s now keeps its OWN winlist.\xff", NAVY, n->channel->name);
+                              }
+                            else if (n->channel->own_winlist==WINLIST_NONE)
+                              tprintf(n->sock,"pline 0 %cChannel #%s now scores on NO winlist.\xff", NAVY, n->channel->name);
+                            else
+                              tprintf(n->sock,"pline 0 %cChannel #%s now scores on the GLOBAL winlist.\xff", NAVY, n->channel->name);
+                            lvprintf(4,"#%s-%s set the channel's winlist mode to %d\n",n->channel->name,n->nick,n->channel->own_winlist);
                             gamewrite(); /* auto-save: no separate /save needed */
                             sendwinlist(n->channel,NULL);
                           }
                         else
-                          tprintf(n->sock,"pline 0 %cUsage: /ownwinlist <0/1>\xff", RED);
+                          tprintf(n->sock,"pline 0 %cUsage: /ownwinlist <0/1/2> (0=global winlist, 1=own winlist, 2=no winlist)\xff", RED);
                       }
                     else
                       tprintf(n->sock,"pline 0 %cYou do NOT have access to that command!\xff",RED);
@@ -2927,14 +2991,19 @@ void net_connected(struct net_t *n, char *buf)
                       { /* BUGFIX: there was another player/team left -> declare a winner as before */
                         if (ns1->type == NET_CONNECTED)
                           {
-                            /* Channels with their own winlist score there (no
-                               global stats/CSV); everyone else scores on the
-                               global winlist as always. */
-                            if (n->channel->own_winlist)
+                            /* Channels with their own winlist score there (own
+                               stats + own CSV); channels with NO winlist score
+                               nowhere; everyone else scores on the global
+                               winlist as always. */
+                            if (n->channel->own_winlist==WINLIST_OWN)
                               {
                                 updatewinlist_in(n->channel->winlist, (strlen(ns1->team)>0) ? ns1->team : ns1->nick,
                                                  (strlen(ns1->team)>0) ? 't' : 'p', 3);
+                                updatewinliststats_in(n->channel->winliststats, (strlen(ns1->team)>0) ? ns1->team : ns1->nick,
+                                                      (strlen(ns1->team)>0) ? 't' : 'p', ns1->level);
                               }
+                            else if (n->channel->own_winlist==WINLIST_NONE)
+                              { /* This channel scores on no winlist at all */ }
                             else if (strlen(ns1->team) > 0)
                               { /* Team won, so add score to team */
                                 updatewinlist(ns1->team,'t',3);
@@ -2995,9 +3064,9 @@ void net_connected(struct net_t *n, char *buf)
                             tprintf(n->sock,"pline 0 %c*** The Game Has %cEnded%c - No Winner! :(\xff", RED, BOLD, BOLD);
                           }
                       }
-                    if (n->channel->own_winlist)
+                    if (n->channel->own_winlist==WINLIST_OWN)
                       write_channel_winlist(n->channel);
-                    else
+                    else if (n->channel->own_winlist==WINLIST_GLOBAL)
                       writewinlist();
                     sendwinlist(n->channel,NULL);	/* Send to all */
 
@@ -3263,11 +3332,14 @@ void net_waitingforteam(struct net_t *n, char *buf)
       
     /* If we are currently paused, kindly let them know that fact to */
     if ( n->channel->status == STATE_PAUSED )
-      tprintf(n->sock,"pause 1\xff");  
-    
+      tprintf(n->sock,"pause 1\xff");
+
     /* And tell them their channel */
     tprintf(n->sock,"pline 0 %c%s%c %chas joined channel #%s\xff", GREEN,n->nick,BLACK,GREEN,n->channel->name);
-    
+
+    /* ... and what this room's games score on */
+    announce_channel_winlist_mode(n);
+
     lvprintf(2,"#%s-%s New connection\n", n->channel->name,n->nick);
   }
 

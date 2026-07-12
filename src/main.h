@@ -111,14 +111,35 @@ typedef unsigned long IP;
 /* public structure of all the net connections */ 
 
 /* Winlist Structure (defined before channel_t, which embeds an array of
-   it: a channel flagged own_winlist=1 keeps its own separate winlist
-   instead of sharing the server-wide global one -- see game.c) */
+   it: a channel flagged own_winlist=WINLIST_OWN keeps its own separate
+   winlist instead of sharing the server-wide global one -- see game.c) */
 struct winlist_t {
   char status;				/* Type. p=player, t=team */
   char name[NICKLEN+1];			/* Name of player/team */
   unsigned long int score;		/* What they scored */
   char inuse;				/* 1=inuse 0=available */
 };
+
+/* Extended winlist statistics (victory-related only). Kept entirely
+   separate from struct winlist_t above: the original winlist (protocol,
+   /winlist command, TetriNET client display) is never touched by this --
+   these extra metrics are only ever exported to the CSV winlist files.
+   Defined before channel_t, which embeds an array of it for the
+   per-channel winlists' own extended stats. */
+struct winliststats_t {
+  char status;				/* Type. p=player, t=team (same key as winlist_t) */
+  char name[NICKLEN+1];			/* Name of player/team */
+  unsigned long wins;			/* Number of victories */
+  time_t last_win;			/* Timestamp of the most recent victory */
+  int best_level;			/* Highest level reached in any winning game */
+  unsigned long level_sum;		/* Sum of levels reached across all victories (for the average) */
+  char inuse;				/* 1=inuse 0=available */
+};
+
+/* What a channel's games score on (channel_t.own_winlist) */
+#define WINLIST_GLOBAL	0		/* the server-wide global winlist (default) */
+#define WINLIST_OWN	1		/* the channel's own winlist (game.winlist.<name>) */
+#define WINLIST_NONE	2		/* no winlist at all: wins score nowhere, no CSV either */
 
 struct channel_t {
   char name[CHANLEN+1];			/* Name of the channel */
@@ -128,8 +149,9 @@ struct channel_t {
   struct channel_t *next;		/* Next in the queue */
   char description[DESCRIPTIONLEN];	/* Description */
   char persistant;			/* 1=can't delete */
-  char own_winlist;			/* 1 = channel keeps its OWN winlist (file game.winlist.<name>) instead of the global one */
-  struct winlist_t winlist[MAXWINLIST];	/* The channel's own winlist, used when own_winlist=1 */
+  char own_winlist;			/* WINLIST_GLOBAL / WINLIST_OWN (file game.winlist.<name>) / WINLIST_NONE */
+  struct winlist_t winlist[MAXWINLIST];	/* The channel's own winlist, used when own_winlist=WINLIST_OWN */
+  struct winliststats_t winliststats[MAXWINLISTSTATS];	/* The own winlist's extended stats (own CSV export) */
   struct net_t *net;			/* Net structure */
     
   int sd_timeleft;			/* Sudden Death Timeout */
@@ -265,22 +287,8 @@ struct net_t {
   struct net_t *next;			/* Next in list */
 }; 
 
-/* (struct winlist_t lives above struct channel_t, which embeds an array
-   of it for per-channel winlists) */
-
-/* Extended winlist statistics (victory-related only). Kept entirely separate
-   from struct winlist_t / game.winlist above: the original winlist (protocol,
-   /winlist command, TetriNET client display) is never touched by this -- these
-   extra metrics are only ever exported to the plain-text CSV winlist file. */
-struct winliststats_t {
-  char status;				/* Type. p=player, t=team (same key as winlist_t) */
-  char name[NICKLEN+1];			/* Name of player/team */
-  unsigned long wins;			/* Number of victories */
-  time_t last_win;			/* Timestamp of the most recent victory */
-  int best_level;			/* Highest level reached in any winning game */
-  unsigned long level_sum;		/* Sum of levels reached across all victories (for the average) */
-  char inuse;				/* 1=inuse 0=available */
-};
+/* (struct winlist_t and struct winliststats_t live above struct
+   channel_t, which embeds arrays of both for per-channel winlists) */
 
 /* One registered admin account (nickname + password). Authenticating with
    /op implicitly uses the already-connected player's nickname
