@@ -7,9 +7,13 @@ Maintainer / Developer: Alexandro G. Corrêa <alex.linux@gmail.com>
 - The server now seeds 20 default rooms instead of 4: the lobby plus
   nine game modes (#classic, #pure, #speed, #sudden, #rush,
   #lines, #nolines, #bomb, #chaos), each also available as a 2-player
-  1x1 twin (#tetrinet1x1, #classic1x1, ...) — so a fresh install offers
+  1x1 twin (#tetris1x1, #classic1x1, ...) — so a fresh install offers
   a full variety of game styles out of the box. The lobby, #classic and
   #pure score on the global winlist; every other room keeps its own.
+- Channel names are now limited to 10 characters and topics to 22
+  (longer ones made the client's /list lines wrap): /join and /topic
+  refuse longer values with an error message, and values over the limit
+  in game.conf are truncated with a startup warning.
 - New per-channel description text (description= in game.conf): shown
   as a "Channel description:" message every time a player enters the
   room, briefly explaining how that room's game works. It does not

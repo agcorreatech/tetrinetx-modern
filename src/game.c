@@ -780,9 +780,10 @@ int gamewrite(void)
     fprintf(file_out,"################ CUSTOM CHANNELS ###########\n");
     fprintf(file_out,"# Below exists (if any) definitions of preset non-removable\n"); 
     fprintf(file_out,"# channels. They exist in the following form:\n");
-    fprintf(file_out,"#  [CHANNELNAME]  # Note NO # in front of name.\n");
+    fprintf(file_out,"#  [CHANNELNAME]  # Note NO # in front of name. Max 10 characters\n");
+    fprintf(file_out,"#                 # (longer wraps the client's /list line; truncated on read).\n");
     fprintf(file_out,"#  maxplayers=6   # Number of players allowed in (6max)\n");
-    fprintf(file_out,"#  topic=My Topic # The channel Topic\n");
+    fprintf(file_out,"#  topic=My Topic # The channel Topic. Max 22 characters (same reason).\n");
     fprintf(file_out,"#  description=.. # Longer text describing how this room's game works.\n");
     fprintf(file_out,"#                 # Sent to a player every time they enter the room\n");
     fprintf(file_out,"#                 # (NOT shown in /list). Empty/absent = no message.\n");
@@ -911,6 +912,14 @@ int gameread(void)
               {/* Yep it is */
                 /* Does the channel exist? */
                 sscanf(buf,"[%60[^]\n]",id_tag);
+                /* Enforce the same name limit /join enforces on creation
+                   (longer names overflow chan->name and wrap the client's
+                   /list line) */
+                if (strlen(id_tag) > CHANNAMELIMIT)
+                  {
+                    id_tag[CHANNAMELIMIT]=0;
+                    lvprintf(1,"WARNING: channel name in %s longer than %d characters -- truncated to [%s]\n", FILE_CONF, CHANNAMELIMIT, id_tag);
+                  }
                 chan=chanlist;
                 while ( (chan!=NULL) && (strcasecmp(chan->name,id_tag)) )
                   chan=chan->next;
@@ -997,6 +1006,11 @@ int gameread(void)
               {
                 if (chan!=NULL)
                   {
+                    if (strlen(id_value) > TOPICLIMIT)
+                      {
+                        id_value[TOPICLIMIT]=0;
+                        lvprintf(1,"WARNING: topic of channel [%s] longer than %d characters -- truncated\n", chan->name, TOPICLIMIT);
+                      }
                     strncpy(chan->description, id_value, DESCRIPTIONLEN-1); chan->description[DESCRIPTIONLEN-1]=0;
                   }
                 error=0;
@@ -1213,6 +1227,11 @@ int gameread(void)
               }
             if (!strcasecmp(id_tag,"main_channel_name"))
               {
+                if (strlen(id_value) > CHANNAMELIMIT)
+                  {
+                    id_value[CHANNAMELIMIT]=0;
+                    lvprintf(1,"WARNING: main_channel_name longer than %d characters -- truncated to %s\n", CHANNAMELIMIT, id_value);
+                  }
                 strncpy(game.main_channel_name, id_value, CHANLEN-1); game.main_channel_name[CHANLEN-1]=0;
                 error=0;
               }
@@ -1449,7 +1468,7 @@ struct channel_t *create_channel(char *name, char persistant);
    2-player "1x1" twin, 20 rooms total:
      - the first preset is the lobby (game.main_channel_name, priority 1:
        where new connections land; variants lobby1, lobby2, ... get
-       priorities 2, 3, ...) and its twin is #tetrinet1x1 (standard rules)
+       priorities 2, 3, ...) and its twin is #tetris1x1 (standard rules)
      - the other 6-player rooms get priorities 30, 31, ...
      - the 1x1 twins get priorities 50, 51, ... in the same order
    The lobby, #classic and #pure score on the GLOBAL winlist; every other
@@ -1476,7 +1495,7 @@ struct channel_preset_t {
 };
 
 static const struct channel_preset_t default_presets[] = {
-  { NULL, "tetrinet1x1", "Server Lobby", "Standard TetriNET 1x1",
+  { NULL, "tetris1x1", "Server Lobby", "Standard TetriNET 1x1",
     "Standard TetriNET: all specials enabled; clearing 2+ lines also sends lines to your opponents.",
     1, 1,   -1,-1,-1,  -1,-1,-1,  -1,-1,  {-1}, {-1} },
   { "classic", "classic1x1", "Classic Tetris", NULL,
@@ -1491,7 +1510,7 @@ static const struct channel_preset_t default_presets[] = {
   { "sudden", "sudden1x1", "Sudden Death", NULL,
     "Sudden death: 2 minutes in, the server starts adding a line to every field every 30 seconds.",
     33, 0,  -1,-1,-1,  -1,-1,-1,  120,-1, {-1}, {-1} },
-  { "rush", "rush1x1", "Sudden Death Rush", NULL,
+  { "rush", "rush1x1", "Sudden Rush", NULL,
     "Aggressive sudden death: after just 1 minute the server adds a line every 10 seconds. Fast games, guaranteed.",
     34, 0,  -1,-1,-1,  -1,-1,-1,  60,10,  {-1}, {-1} },
   { "lines", "lines1x1", "Lines Only", NULL,

@@ -1772,7 +1772,11 @@ void net_connected(struct net_t *n, char *buf)
                     if ( can_use_topic(n) )
                       {
                         P=MSG+7;
-                        if (strlen(MSG)>=7)
+                        if ( (strlen(MSG)>=7) && (strlen(P) > TOPICLIMIT) )
+                          {
+                            tprintf(n->sock,"pline 0 %cTopic is too long (maximum %d characters)!\xff", RED, TOPICLIMIT);
+                          }
+                        else if (strlen(MSG)>=7)
                           {
                             safe_strcpy(n->channel->description, DESCRIPTIONLEN, P);
                             lvprintf(4,"#%s-%s changed channel topic to %s\n",n->channel->name,n->nick,n->channel->description);
@@ -2010,6 +2014,11 @@ void net_connected(struct net_t *n, char *buf)
                                   tprintf(n->sock,"pline 0 %cYou were kicked from #%s and cannot rejoin it yet. Try again in %d minute%s.\xff", RED, chan->name, (num+59)/60, ((num+59)/60==1)?"":"s");
                                 else
                                   tprintf(n->sock,"pline 0 %cYou were kicked from #%s and cannot rejoin it yet. Try again in %d second%s.\xff", RED, chan->name, num, (num==1)?"":"s");
+                              }
+                            else if ( (chan==NULL) && (j>=0) && (strlen(STRG) > CHANNAMELIMIT) )
+                              { /* Would create a new channel, but the name is over the limit
+                                   (longer names make the client's /list line wrap) */
+                                tprintf(n->sock,"pline 0 %cChannel name is too long (maximum %d characters)!\xff", RED, CHANNAMELIMIT);
                               }
                             else if ( (chan==NULL) && (j>=0) && (numchannels() >= game.maxchannels))
                               { /* Too many channels */

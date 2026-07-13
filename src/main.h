@@ -59,7 +59,10 @@
 #define SDMSGLEN 80			/* Length of Sudden Death Message */
 #define PASSLEN 12			/* Length of Password */
 #define MAXPLAYERS 6			/* Maximum number of players allowed */
-#define CHANLEN 16			/* Length of channel names */
+#define CHANLEN 16			/* Length of channel names (buffer size) */
+#define CHANNAMELIMIT 10		/* Max channel name length ENFORCED on creation --
+					   longer names make the client's /list line wrap */
+#define TOPICLIMIT 22			/* Max topic length enforced on /topic + game.conf, same reason */
 #define IPLEN 16			/* Size of IP */
 #define DEFAULTMAXPLAYERS 6		/* Default max players in channel */
 #define DEFAULTPRIORITY 50		/* Default priority */

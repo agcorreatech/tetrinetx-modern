@@ -100,7 +100,7 @@ echo "== listchan =="
 resp="$(query listchan)"
 echo "  response: ${resp}"
 chan_count="$(echo "${resp}" | grep -c '^"')"
-if echo "${resp}" | grep -q '"lobby"' && echo "${resp}" | grep -q '"tetrinet1x1"' \
+if echo "${resp}" | grep -q '"lobby"' && echo "${resp}" | grep -q '"tetris1x1"' \
    && echo "${resp}" | grep -q '"chaos1x1"' && [ "${chan_count}" -eq 20 ] \
    && echo "${resp}" | grep -q "+OK"; then
   pass "listchan shows the 20 default rooms (lobby, game modes and their 1x1 twins) and returns +OK"
