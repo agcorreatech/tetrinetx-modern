@@ -99,10 +99,13 @@ echo
 echo "== listchan =="
 resp="$(query listchan)"
 echo "  response: ${resp}"
-if echo "${resp}" | grep -q "lobby" && echo "${resp}" | grep -q "1x1" && echo "${resp}" | grep -q "+OK"; then
-  pass "listchan shows the default 'lobby' and '1x1' channels and returns +OK"
+chan_count="$(echo "${resp}" | grep -c '^"')"
+if echo "${resp}" | grep -q '"lobby"' && echo "${resp}" | grep -q '"tetrinet1x1"' \
+   && echo "${resp}" | grep -q '"chaos1x1"' && [ "${chan_count}" -eq 20 ] \
+   && echo "${resp}" | grep -q "+OK"; then
+  pass "listchan shows the 20 default rooms (lobby, game modes and their 1x1 twins) and returns +OK"
 else
-  fail "unexpected listchan response: ${resp}"
+  fail "unexpected listchan response (expected 20 default rooms, got ${chan_count}): ${resp}"
 fi
 
 echo

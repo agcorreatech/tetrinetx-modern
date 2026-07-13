@@ -783,6 +783,9 @@ int gamewrite(void)
     fprintf(file_out,"#  [CHANNELNAME]  # Note NO # in front of name.\n");
     fprintf(file_out,"#  maxplayers=6   # Number of players allowed in (6max)\n");
     fprintf(file_out,"#  topic=My Topic # The channel Topic\n");
+    fprintf(file_out,"#  description=.. # Longer text describing how this room's game works.\n");
+    fprintf(file_out,"#                 # Sent to a player every time they enter the room\n");
+    fprintf(file_out,"#                 # (NOT shown in /list). Empty/absent = no message.\n");
     fprintf(file_out,"#  priority=50    # Ordering weight shown in /list. New connections always\n");
     fprintf(file_out,"#                 # land in a lobby room (main_channel_name, lobby1, ...),\n");
     fprintf(file_out,"#                 # so priority does NOT steer connect placement.\n");
@@ -800,6 +803,7 @@ int gamewrite(void)
             fprintf(file_out,"[%s]\n",chan->name);
             fprintf(file_out,"maxplayers=%d\n",chan->maxplayers);
             fprintf(file_out,"topic=%s\n",chan->description);
+            if (chan->chan_desc[0]) fprintf(file_out,"description=%s\n",chan->chan_desc);
             fprintf(file_out,"priority=%d\n",chan->priority);
             if (chan->own_winlist) fprintf(file_out,"own_winlist=%d\n",chan->own_winlist);
             
@@ -854,7 +858,7 @@ int gameread(void)
     FILE *file_in;
     char buf[513];
     char id_tag[81];
-    char id_value[81];
+    char id_value[CHANDESCLEN+1];	/* big enough for a description= value; every other key is strncpy-capped anyway */
     int i,j,error;
     struct channel_t *chan;
     
@@ -927,6 +931,7 @@ int gameread(void)
                     chan->maxplayers=DEFAULTMAXPLAYERS;
                     chan->status=STATE_ONLINE;
                     chan->description[0]=0;
+                    chan->chan_desc[0]=0;
                     chan->own_winlist=WINLIST_GLOBAL;
                     init_winlist_array(chan->winlist);
                     init_winliststats_array(chan->winliststats);
@@ -974,7 +979,7 @@ int gameread(void)
             
             id_tag[0]=0;
             id_value[0]=0;
-            sscanf(buf,"%80[^= ] = %80[^\n]", id_tag, id_value);
+            sscanf(buf,"%80[^= ] = %256[^\n]", id_tag, id_value);
             /* Yuk bit */
             if (!strcasecmp(id_tag,"maxplayers"))
               {
@@ -993,6 +998,14 @@ int gameread(void)
                 if (chan!=NULL)
                   {
                     strncpy(chan->description, id_value, DESCRIPTIONLEN-1); chan->description[DESCRIPTIONLEN-1]=0;
+                  }
+                error=0;
+              }
+            if (!strcasecmp(id_tag,"description"))
+              {
+                if (chan!=NULL)
+                  {
+                    strncpy(chan->chan_desc, id_value, CHANDESCLEN-1); chan->chan_desc[CHANDESCLEN-1]=0;
                   }
                 error=0;
               }
@@ -1431,61 +1444,144 @@ int gameread(void)
 struct channel_t *create_channel(char *name, char persistant);
 
 /* create_default_channels() - Seeds the default rooms used when
-   game.conf defines no [channel] blocks at all:
-     #lobby (game.main_channel_name) - topic "Server Lobby", priority 1:
-       the room players land in when they connect (new connections always
-       land in a lobby variant, which get priorities 2, 3, ... following
-       their names; game rooms are joined with /join).
-     #1x1       - 2 players max, "Game 1x1", priority 30, own winlist.
-     #sudden    - "Sudden Death", priority 31, sudden death on by
-                  default (sd_timeout=120), own winlist.
-     #sudden1x1 - 2 players max, "1x1 Sudden Death", priority 32, sudden
-                  death on by default, own winlist.
-   (priority only orders the /list display.) All are persistent presets,
-   so they are written into game.conf. */
+   game.conf defines no [channel] blocks at all. Ten game-mode presets
+   (the table below); each one becomes BOTH a 6-player room and a
+   2-player "1x1" twin, 20 rooms total:
+     - the first preset is the lobby (game.main_channel_name, priority 1:
+       where new connections land; variants lobby1, lobby2, ... get
+       priorities 2, 3, ...) and its twin is #tetrinet1x1 (standard rules)
+     - the other 6-player rooms get priorities 30, 31, ...
+     - the 1x1 twins get priorities 50, 51, ... in the same order
+   The lobby, #classic and #pure score on the GLOBAL winlist; every other
+   room (including ALL 1x1 twins) keeps its own. (priority only orders
+   the /list display.) All are persistent presets, so they are written
+   into game.conf. Each preset also carries the channel description text
+   shown to a player on room entry (see announce_channel_description()). */
+
+struct channel_preset_t {
+  char *name;			/* 6-player room; NULL = game.main_channel_name (the lobby) */
+  char *name1x1;		/* its 2-player twin */
+  char *topic;			/* 6p topic; the twin gets "<topic> 1x1" unless topic1x1 is set */
+  char *topic1x1;
+  char *chan_desc;		/* "Channel description:" text, shared by both rooms */
+  int priority;			/* 6p priority (twins get 50, 51, ... in table order) */
+  char global_winlist;		/* 1 = the 6p room scores on the global winlist (twins never do) */
+  /* Ruleset overrides; -1 = keep the game.conf global default */
+  int starting_level, lines_per_level, level_increase;
+  int lines_per_special, special_added, classic_rules;
+  int sd_timeout, sd_secs_between_lines;
+  int blocks[7];		/* leftl,leftz,square,rightl,rightz,halfcross,line ([0]==-1 = defaults) */
+  int specials[9];		/* addline,clearline,nukefield,randomclear,switchfield,
+				   clearspecial,gravity,quakefield,blockbomb ([0]==-1 = defaults) */
+};
+
+static const struct channel_preset_t default_presets[] = {
+  { NULL, "tetrinet1x1", "Server Lobby", "Standard TetriNET 1x1",
+    "Standard TetriNET: all specials enabled; clearing 2+ lines also sends lines to your opponents.",
+    1, 1,   -1,-1,-1,  -1,-1,-1,  -1,-1,  {-1}, {-1} },
+  { "classic", "classic1x1", "Classic Tetris", NULL,
+    "Classic Tetris battle: NO specials. Clearing 2/3/4 lines sends 1/2/4 lines to your opponents.",
+    30, 1,  -1,-1,-1,  999,0,1,   -1,-1,  {-1}, {-1} },
+  { "pure", "pure1x1", "Pure Tetris", NULL,
+    "Pure Tetris: no specials, no line attacks. Speed and clean stacking decide who survives.",
+    31, 1,  -1,-1,-1,  999,0,0,   -1,-1,  {-1}, {-1} },
+  { "speed", "speed1x1", "High Speed", NULL,
+    "High speed: games start at level 10 and accelerate every line. Short, intense matches.",
+    32, 0,  10,1,2,    -1,-1,-1,  -1,-1,  {-1}, {-1} },
+  { "sudden", "sudden1x1", "Sudden Death", NULL,
+    "Sudden death: 2 minutes in, the server starts adding a line to every field every 30 seconds.",
+    33, 0,  -1,-1,-1,  -1,-1,-1,  120,-1, {-1}, {-1} },
+  { "suddenrush", "suddenrush1x1", "Sudden Death Rush", NULL,
+    "Aggressive sudden death: after just 1 minute the server adds a line every 10 seconds. Fast games, guaranteed.",
+    34, 0,  -1,-1,-1,  -1,-1,-1,  60,10,  {-1}, {-1} },
+  { "lines", "lines1x1", "Lines Only", NULL,
+    "Line warfare: the only specials are Add Line (A) and Clear Line (C) - attack opponents or clean your own field.",
+    35, 0,  -1,-1,-1,  -1,-1,-1,  -1,-1,  {-1}, {50,50,0,0,0,0,0,0,0} },
+  { "nolines", "nolines1x1", "No I-Piece", NULL,
+    "The I-piece never drops: no 4-line Tetris. Survive on the other six pieces.",
+    36, 0,  -1,-1,-1,  -1,-1,-1,  -1,-1,  {17,17,16,17,17,16,0}, {-1} },
+  { "bomb", "bomb1x1", "Block Bomb Only", NULL,
+    "The only special is Block Bomb (O): detonate it to scatter blocks across your target's field.",
+    37, 0,  -1,-1,-1,  -1,-1,-1,  -1,-1,  {-1}, {0,0,0,0,0,0,0,0,100} },
+  { "chaos", "chaos1x1", "Special Chaos", NULL,
+    "Special chaos: every special drops with equal chance and each cleared line yields 3 of them. Anything can happen.",
+    38, 0,  -1,-1,-1,  1,3,-1,    -1,-1,  {-1}, {12,11,11,11,11,11,11,11,11} },
+};
+
+/* Applies one preset row to a freshly create_channel()'d room (which
+   already carries the game.conf global defaults). */
+static void apply_channel_preset(struct channel_t *chan, const struct channel_preset_t *p,
+                                 char *topic, int priority, int maxplayers, char own_winlist)
+  {
+    strncpy(chan->description, topic, DESCRIPTIONLEN-1); chan->description[DESCRIPTIONLEN-1]=0;
+    strncpy(chan->chan_desc, p->chan_desc, CHANDESCLEN-1); chan->chan_desc[CHANDESCLEN-1]=0;
+    chan->priority=priority;
+    chan->maxplayers=maxplayers;
+    chan->own_winlist=own_winlist;
+    if (own_winlist==WINLIST_OWN)
+      read_channel_winlist(chan);
+
+    if (p->starting_level!=-1) chan->starting_level=p->starting_level;
+    if (p->lines_per_level!=-1) chan->lines_per_level=p->lines_per_level;
+    if (p->level_increase!=-1) chan->level_increase=p->level_increase;
+    if (p->lines_per_special!=-1) chan->lines_per_special=p->lines_per_special;
+    if (p->special_added!=-1) chan->special_added=p->special_added;
+    if (p->classic_rules!=-1) chan->classic_rules=p->classic_rules;
+    if (p->sd_timeout!=-1) chan->sd_timeout=p->sd_timeout;
+    if (p->sd_secs_between_lines!=-1) chan->sd_secs_between_lines=p->sd_secs_between_lines;
+
+    if (p->blocks[0]!=-1)
+      {
+        chan->block_leftl=p->blocks[0];
+        chan->block_leftz=p->blocks[1];
+        chan->block_square=p->blocks[2];
+        chan->block_rightl=p->blocks[3];
+        chan->block_rightz=p->blocks[4];
+        chan->block_halfcross=p->blocks[5];
+        chan->block_line=p->blocks[6];
+      }
+    if (p->specials[0]!=-1)
+      {
+        chan->special_addline=p->specials[0];
+        chan->special_clearline=p->specials[1];
+        chan->special_nukefield=p->specials[2];
+        chan->special_randomclear=p->specials[3];
+        chan->special_switchfield=p->specials[4];
+        chan->special_clearspecial=p->specials[5];
+        chan->special_gravity=p->specials[6];
+        chan->special_quakefield=p->specials[7];
+        chan->special_blockbomb=p->specials[8];
+      }
+  }
+
 void create_default_channels(void)
   {
     struct channel_t *chan;
+    char topic1x1[DESCRIPTIONLEN+8];
+    int i, count;
 
-    chan = create_channel(game.main_channel_name, 1);
-    if (chan != NULL)
+    count = sizeof(default_presets)/sizeof(default_presets[0]);
+    for (i=0; i<count; i++)
       {
-        strncpy(chan->description,"Server Lobby",DESCRIPTIONLEN-1); chan->description[DESCRIPTIONLEN-1]=0;
-        chan->priority=1;
+        const struct channel_preset_t *p = &default_presets[i];
+
+        chan = create_channel(p->name!=NULL ? p->name : game.main_channel_name, 1);
+        if (chan != NULL)
+          apply_channel_preset(chan, p, p->topic, p->priority, DEFAULTMAXPLAYERS,
+                               p->global_winlist ? WINLIST_GLOBAL : WINLIST_OWN);
+
+        chan = create_channel(p->name1x1, 1);
+        if (chan != NULL)
+          {
+            if (p->topic1x1!=NULL)
+              snprintf(topic1x1, sizeof(topic1x1), "%s", p->topic1x1);
+            else
+              snprintf(topic1x1, sizeof(topic1x1), "%s 1x1", p->topic);
+            apply_channel_preset(chan, p, topic1x1, 50+i, 2, WINLIST_OWN);
+          }
       }
 
-    chan = create_channel("1x1", 1);
-    if (chan != NULL)
-      {
-        chan->maxplayers=2;
-        strncpy(chan->description,"Game 1x1",DESCRIPTIONLEN-1); chan->description[DESCRIPTIONLEN-1]=0;
-        chan->priority=30;
-        chan->own_winlist=WINLIST_OWN;
-        read_channel_winlist(chan);
-      }
-
-    chan = create_channel("sudden", 1);
-    if (chan != NULL)
-      {
-        strncpy(chan->description,"Sudden Death",DESCRIPTIONLEN-1); chan->description[DESCRIPTIONLEN-1]=0;
-        chan->priority=31;
-        chan->sd_timeout=120;	/* sudden death arms 2 minutes into every game */
-        chan->own_winlist=WINLIST_OWN;
-        read_channel_winlist(chan);
-      }
-
-    chan = create_channel("sudden1x1", 1);
-    if (chan != NULL)
-      {
-        chan->maxplayers=2;
-        strncpy(chan->description,"1x1 Sudden Death",DESCRIPTIONLEN-1); chan->description[DESCRIPTIONLEN-1]=0;
-        chan->priority=32;
-        chan->sd_timeout=120;	/* sudden death arms 2 minutes into every game */
-        chan->own_winlist=WINLIST_OWN;
-        read_channel_winlist(chan);
-      }
-
-    lvprintf(1,"No channels configured -- created default channels #%s and #1x1\n", game.main_channel_name);
+    lvprintf(1,"No channels configured -- created the %d default rooms (#%s + game modes and their 1x1 twins)\n", count*2, game.main_channel_name);
   }
 
 void init_game(void)

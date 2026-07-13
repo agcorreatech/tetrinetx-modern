@@ -64,6 +64,7 @@
 #define DEFAULTMAXPLAYERS 6		/* Default max players in channel */
 #define DEFAULTPRIORITY 50		/* Default priority */
 #define DESCRIPTIONLEN 31		/* Description */
+#define CHANDESCLEN 256			/* Length of the channel description text (shown on room entry) */
 
 #define STATE_OFFLINE 0 	/* Offline */
 #define STATE_ONLINE  1		/* Not in game */
@@ -148,6 +149,8 @@ struct channel_t {
   unsigned char status;			/* STATE_XXXXXX */
   struct channel_t *next;		/* Next in the queue */
   char description[DESCRIPTIONLEN];	/* Description */
+  char chan_desc[CHANDESCLEN];		/* Channel description text: how this room's game works,
+					   sent to a player on every room entry (not shown in /list) */
   char persistant;			/* 1=can't delete */
   char own_winlist;			/* WINLIST_GLOBAL / WINLIST_OWN (file game.winlist.<name>) / WINLIST_NONE */
   struct winlist_t winlist[MAXWINLIST];	/* The channel's own winlist, used when own_winlist=WINLIST_OWN */
@@ -378,4 +381,4 @@ void net_connected(struct net_t *n, char *buf);
 void net_waitingforteam(struct net_t *n, char *buf);
 void init_main(void);
 void lprintf(char *format,...);
-void lvprintf(int priority, char *format,...);
+void lvprintf(int priority, char *format,...);

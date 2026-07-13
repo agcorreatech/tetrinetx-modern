@@ -31,26 +31,47 @@ so each section starts from a clean slate unless it says otherwise.
 
 - [ ] Connect with nickname `alice`. Confirm you land in channel `#lobby`
       (default channel, topic "Server Lobby", priority 1 — created
-      automatically together with `#1x1` when `game.conf` defines no
-      channels).
-- [ ] Run `/list`. **Expected:** four default rooms — `#lobby`
-      (priority 01, "Server Lobby"), `#1x1` (priority 30, max **2**,
-      "Game 1x1"), `#sudden` (priority 31, "Sudden Death") and
-      `#sudden1x1` (priority 32, max **2**, "1x1 Sudden Death"). Lobby
-      variants (`#lobby1`, ...) get priorities 02, 03, ... following
-      their names.
+      automatically together with the other default rooms when
+      `game.conf` defines no channels).
+- [ ] Run `/list`. **Expected:** 20 default rooms, in this order —
+      `#lobby` (priority 01, "Server Lobby"), then the 6-player game
+      modes: `#classic` (30, "Classic Tetris"), `#pure` (31,
+      "Pure Tetris"), `#speed` (32, "High Speed"), `#sudden` (33,
+      "Sudden Death"), `#suddenrush` (34, "Sudden Death Rush"), `#lines`
+      (35, "Lines Only"), `#nolines` (36, "No I-Piece"), `#bomb` (37,
+      "Block Bomb Only"), `#chaos` (38, "Special Chaos"), then their
+      2-player twins with priorities 50-59: `#tetrinet1x1` (50,
+      "Standard TetriNET 1x1"), `#classic1x1` (51), `#pure1x1` (52),
+      `#speed1x1` (53), `#sudden1x1` (54), `#suddenrush1x1` (55),
+      `#lines1x1` (56), `#nolines1x1` (57), `#bomb1x1` (58) and
+      `#chaos1x1` (59), each topic being the 6-player one + " 1x1".
+      Lobby variants (`#lobby1`, ...) get priorities 02, 03, ...
+      following their names.
 - [ ] On connecting (and on every channel change), confirm the player is
-      told what the room scores on: `#lobby` shows "This channel scores
-      on the GLOBAL winlist."; `#1x1`/`#sudden`/`#sudden1x1` show "This
-      channel has its OWN winlist (see /winlist)." (all three default to
-      their own winlists).
+      told what the room scores on: `#lobby`, `#classic` and `#pure`
+      (and lobby variants) show "This channel scores on the GLOBAL
+      winlist."; every other room — including ALL `*1x1` twins — shows
+      "This channel has its OWN winlist (see /winlist)."
+- [ ] Also on connecting (and on every channel change), confirm a
+      "**Channel description:**" line follows (bold title, green text)
+      with that room's game description (e.g. `#lobby`: "Standard
+      TetriNET: all specials enabled; ..."). Rooms created by players
+      with `/join #newname` show NO such line.
 - [ ] Start a game in `#sudden` (or `#sudden1x1`) and keep playing.
       **Expected:** sudden death arms automatically ~2 minutes in
       (`sd_timeout=120` by default in these rooms): the SUDDEN DEATH
-      message appears and the server starts adding lines.
+      message appears and the server starts adding lines every 30s. In
+      `#suddenrush`/`#suddenrush1x1` it arms after ~1 minute and adds a
+      line every 10s.
+- [ ] Spot-check the game modes: `#classic`/`#pure` never produce
+      special blocks (`#pure` also never sends lines on multi-line
+      clears; `#classic` does); `#speed` starts at level 10 and levels
+      up every line; `#lines` only yields A/C specials; `#nolines`
+      never drops the I-piece; `#bomb` only yields Block Bombs;
+      `#chaos` yields 3 specials per cleared line, all types.
 - [ ] Fill `#lobby` to its 6 players, then connect a 7th client.
       **Expected:** the 7th player lands in `#lobby1` (created
-      automatically) — NEVER in `#1x1` or any other game room, even with
+      automatically) — NEVER in `#tetrinet1x1` or any other game room, even with
       free slots (new connections always land in a lobby variant; game
       rooms are entered explicitly with `/join`). Fill `#lobby1` too and
       connect more — **expected:** `#lobby2` is created, and so on.
@@ -303,7 +324,7 @@ As an authenticated admin (section 3):
 - [ ] `/topic Friendly game night` in a channel YOU created (e.g. after
       `/join #myroom`) as a non-admin chanop — confirm it works, shows in
       `/list`, and `/topic` appears in your `/help`. Then try the same in
-      `#lobby` or `#1x1` (preset channels) as a non-admin — **expected:**
+      `#lobby` or `#tetrinet1x1` (preset channels) as a non-admin — **expected:**
       "You do NOT have access to that command!" and `/topic` is hidden
       from `/help` while you're in a preset channel. As an authenticated
       admin, `/topic` works anywhere and is auto-saved to `game.conf`.
@@ -419,9 +440,9 @@ After at least one completed game with a winner (section 9):
 
 ## 12. Per-channel winlists (`/ownwinlist`, `/winlists`, `/winlist` args)
 
-As an authenticated admin, in `#1x1` (or any channel):
+As an authenticated admin, in `#tetrinet1x1` (or any channel):
 
-- [ ] `/ownwinlist 1` — **expected:** "Channel #1x1 now keeps its OWN
+- [ ] `/ownwinlist 1` — **expected:** "Channel #tetrinet1x1 now keeps its OWN
       winlist.", the setting is auto-saved into the channel's
       `game.conf` block (`own_winlist=1`), and the client's winlist
       display refreshes (empty for a brand-new channel winlist).
@@ -430,13 +451,13 @@ As an authenticated admin, in `#1x1` (or any channel):
       while the global winlist, `game.winlist.csv` and the extended
       stats are untouched.
 - [ ] `/winlists` — **expected:** lists `global` plus each channel that
-      keeps its own winlist (e.g. `#1x1`).
+      keeps its own winlist (e.g. `#tetrinet1x1`).
 - [ ] `/winlist` inside that channel shows ITS winlist (header "Top 10
-      Winlist of #1x1"); `/winlist 5 global` shows the global one;
-      `/winlist 5 #1x1` shows the channel one from anywhere;
+      Winlist of #tetrinet1x1"); `/winlist 5 global` shows the global one;
+      `/winlist 5 #tetrinet1x1` shows the channel one from anywhere;
       `/winlist #nonexistent` — "No such channel".
-- [ ] `/clear #1x1` — **expected:** only that channel's winlist is
-      cleared, its members see "*** The winlist of #1x1 has been reset
+- [ ] `/clear #tetrinet1x1` — **expected:** only that channel's winlist is
+      cleared, its members see "*** The winlist of #tetrinet1x1 has been reset
       by **<nick>**", and the global winlist is untouched. `/clear
       #lobby` (a channel WITHOUT its own winlist) — **expected:** an
       explanatory rejection pointing at `/clear global`.
@@ -453,7 +474,7 @@ As an authenticated admin, in `#1x1` (or any channel):
       `/clear #x` answers "does not score on any winlist - nothing to
       clear".
 - [ ] `/winlist` with no selector — **expected:** one block per winlist:
-      "Global Winlist (top 10)" first, then "Channel #1x1 Winlist",
+      "Global Winlist (top 10)" first, then "Channel #tetrinet1x1 Winlist",
       "Channel #sudden Winlist", etc., with "(empty)" under headers of
       winlists that have no entries yet.
 - [ ] With `winlist_export_txt=1`, win a game in an own-winlist room and

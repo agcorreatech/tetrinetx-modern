@@ -4,6 +4,16 @@ Maintainer / Developer: Alexandro G. Corrêa <alex.linux@gmail.com>
 
 ## Release 04 - 12/Jul/2026
 
+- The server now seeds 20 default rooms instead of 4: the lobby plus
+  nine game modes (#classic, #pure, #speed, #sudden, #suddenrush,
+  #lines, #nolines, #bomb, #chaos), each also available as a 2-player
+  1x1 twin (#tetrinet1x1, #classic1x1, ...) — so a fresh install offers
+  a full variety of game styles out of the box. The lobby, #classic and
+  #pure score on the global winlist; every other room keeps its own.
+- New per-channel description text (description= in game.conf): shown
+  as a "Channel description:" message every time a player enters the
+  room, briefly explaining how that room's game works. It does not
+  appear in /list, and rooms created by players don't have one.
 - Server version bumped to v1.13.26, shown in /help, in the startup
   banner/log and in the "version" query reply.
 - New multi-admin authentication: game.secure now holds one [nickname]

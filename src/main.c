@@ -412,6 +412,7 @@ struct channel_t *create_channel(char *name, char persistant)
     chan->maxplayers = DEFAULTMAXPLAYERS;
     chan->status = STATE_ONLINE;
     chan->description[0] = 0;
+    chan->chan_desc[0] = 0;
     chan->own_winlist = WINLIST_GLOBAL;
     init_winlist_array(chan->winlist);
     init_winliststats_array(chan->winliststats);
@@ -519,6 +520,16 @@ void announce_channel_winlist_mode(struct net_t *n)
       tprintf(n->sock,"pline 0 %cThis channel has its OWN winlist (see /winlist).\xff", NAVY);
     else
       tprintf(n->sock,"pline 0 %cThis channel scores on the GLOBAL winlist.\xff", NAVY);
+  }
+
+/* announce_channel_description(n) - Tells a player how the room they just
+   entered plays (the channel's description= text from game.conf; not
+   shown in /list). Sent on the same paths as the winlist-mode notice:
+   connect placement, /join, and kick/moves. */
+void announce_channel_description(struct net_t *n)
+  {
+    if (n->channel->chan_desc[0])
+      tprintf(n->sock,"pline 0 %cChannel description:%c %c%s\xff", BOLD, BOLD, GREEN, n->channel->chan_desc);
   }
 
 /* print_winlist_to(n, wl, wchan, count) - Sends one winlist's top 'count'
@@ -755,6 +766,7 @@ void move_player_to_channel(struct net_t *n, struct channel_t *new_chan, char ma
 
     tprintf(n->sock, "playernum %d\xff", n->gameslot);
     announce_channel_winlist_mode(n);
+    announce_channel_description(n);
     sendwinlist(new_chan, n);   /* refresh the client's winlist display for the new room */
 
     if ( (new_chan->status == STATE_INGAME) || (new_chan->status == STATE_PAUSED) )
@@ -2031,6 +2043,7 @@ void net_connected(struct net_t *n, char *buf)
                                     chan->maxplayers=DEFAULTMAXPLAYERS;
                                     chan->status=STATE_ONLINE;
                                     chan->description[0]=0;
+                                    chan->chan_desc[0]=0;
                                     chan->own_winlist=WINLIST_GLOBAL;
                                     init_winlist_array(chan->winlist);
                                     init_winliststats_array(chan->winliststats);
@@ -2211,6 +2224,7 @@ void net_connected(struct net_t *n, char *buf)
                                 /* Tell them what this room's games score on,
                                    and refresh their winlist display for it */
                                 announce_channel_winlist_mode(n);
+                                announce_channel_description(n);
                                 sendwinlist(n->channel, n);
 
                                 /* If 1 or less players/teams now are playing, AND the player that
@@ -3337,8 +3351,9 @@ void net_waitingforteam(struct net_t *n, char *buf)
     /* And tell them their channel */
     tprintf(n->sock,"pline 0 %c%s%c %chas joined channel #%s\xff", GREEN,n->nick,BLACK,GREEN,n->channel->name);
 
-    /* ... and what this room's games score on */
+    /* ... and what this room's games score on, and how it plays */
     announce_channel_winlist_mode(n);
+    announce_channel_description(n);
 
     lvprintf(2,"#%s-%s New connection\n", n->channel->name,n->nick);
   }
