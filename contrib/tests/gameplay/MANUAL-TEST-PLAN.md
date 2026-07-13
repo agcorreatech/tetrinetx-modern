@@ -37,12 +37,12 @@ so each section starts from a clean slate unless it says otherwise.
       `#lobby` (priority 01, "Server Lobby"), then the 6-player game
       modes: `#classic` (30, "Classic Tetris"), `#pure` (31,
       "Pure Tetris"), `#speed` (32, "High Speed"), `#sudden` (33,
-      "Sudden Death"), `#suddenrush` (34, "Sudden Death Rush"), `#lines`
+      "Sudden Death"), `#rush` (34, "Sudden Death Rush"), `#lines`
       (35, "Lines Only"), `#nolines` (36, "No I-Piece"), `#bomb` (37,
       "Block Bomb Only"), `#chaos` (38, "Special Chaos"), then their
       2-player twins with priorities 50-59: `#tetrinet1x1` (50,
       "Standard TetriNET 1x1"), `#classic1x1` (51), `#pure1x1` (52),
-      `#speed1x1` (53), `#sudden1x1` (54), `#suddenrush1x1` (55),
+      `#speed1x1` (53), `#sudden1x1` (54), `#rush1x1` (55),
       `#lines1x1` (56), `#nolines1x1` (57), `#bomb1x1` (58) and
       `#chaos1x1` (59), each topic being the 6-player one + " 1x1".
       Lobby variants (`#lobby1`, ...) get priorities 02, 03, ...
@@ -61,7 +61,7 @@ so each section starts from a clean slate unless it says otherwise.
       **Expected:** sudden death arms automatically ~2 minutes in
       (`sd_timeout=120` by default in these rooms): the SUDDEN DEATH
       message appears and the server starts adding lines every 30s. In
-      `#suddenrush`/`#suddenrush1x1` it arms after ~1 minute and adds a
+      `#rush`/`#rush1x1` it arms after ~1 minute and adds a
       line every 10s.
 - [ ] Spot-check the game modes: `#classic`/`#pure` never produce
       special blocks (`#pure` also never sends lines on multi-line

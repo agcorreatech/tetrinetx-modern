@@ -1491,7 +1491,7 @@ static const struct channel_preset_t default_presets[] = {
   { "sudden", "sudden1x1", "Sudden Death", NULL,
     "Sudden death: 2 minutes in, the server starts adding a line to every field every 30 seconds.",
     33, 0,  -1,-1,-1,  -1,-1,-1,  120,-1, {-1}, {-1} },
-  { "suddenrush", "suddenrush1x1", "Sudden Death Rush", NULL,
+  { "rush", "rush1x1", "Sudden Death Rush", NULL,
     "Aggressive sudden death: after just 1 minute the server adds a line every 10 seconds. Fast games, guaranteed.",
     34, 0,  -1,-1,-1,  -1,-1,-1,  60,10,  {-1}, {-1} },
   { "lines", "lines1x1", "Lines Only", NULL,

@@ -5,7 +5,7 @@ Maintainer / Developer: Alexandro G. Corrêa <alex.linux@gmail.com>
 ## Release 04 - 12/Jul/2026
 
 - The server now seeds 20 default rooms instead of 4: the lobby plus
-  nine game modes (#classic, #pure, #speed, #sudden, #suddenrush,
+  nine game modes (#classic, #pure, #speed, #sudden, #rush,
   #lines, #nolines, #bomb, #chaos), each also available as a 2-player
   1x1 twin (#tetrinet1x1, #classic1x1, ...) — so a fresh install offers
   a full variety of game styles out of the box. The lobby, #classic and
