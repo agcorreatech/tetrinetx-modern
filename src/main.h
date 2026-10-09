@@ -95,6 +95,16 @@
 
 #define CYCLE 1				/* How many (s) is 1 cycle */
 
+#define MAXADMINS 50			/* Maximum number of registered admin accounts */
+#define BANREASONLEN 120		/* Maximum length of a ban reason */
+#define BAN_TYPE_IP  'i'		/* Ban entry type: IP address (supports wildcards) */
+#define BAN_TYPE_NICK 'n'		/* Ban entry type: nickname */
+#define MAXBANS 200			/* Maximum number of simultaneous ban entries (IP+nick combined) */
+#define MAXWINLISTSTATS MAXWINLIST	/* Extended winlist stats share the same ceiling as the winlist */
+#define MAXKICKCOOLDOWNS 100		/* Maximum number of simultaneous kick-cooldown entries */
+#define KICK_COOLDOWN_SECS (5*60)	/* How long (s) a kicked player is blocked from rejoining that room */
+#define MAXLOBBYVARIANTS 50		/* Safety cap on Lobby/Lobby1/Lobby2/... variants searched/created */
+
 typedef unsigned long IP;
 
 /* public structure of all the net connections */ 
@@ -200,6 +210,7 @@ struct game_t {
   int command_list;		/* Allow list */
   int command_join;		/* Allow join */
   int command_who;		/* Allow who */
+  int command_whois;		/* Allow whois */
   int command_topic;		/* Allow topic */
   int command_priority;		/* Allow priority */
   int command_move;		/* Allow move */
@@ -207,7 +218,12 @@ struct game_t {
   int command_persistant;
   int command_save;
   int command_reset;
-  
+  int command_ban;		/* Allow /ban and /unban */
+  int command_banlist;		/* Allow /banlist */
+
+  int winlist_export_txt;	/* Export the winlist to a plain-text CSV file? */
+  char main_channel_name[CHANLEN+1];	/* Base name of the "lobby" room(s) kicked players are redirected to */
+
   int verbose;			/* Verbosity */
   char pidfile[PIDFILELEN+1];
 };
@@ -243,11 +259,54 @@ struct winlist_t {
   char inuse;				/* 1=inuse 0=available */
 };
 
+/* Extended winlist statistics (victory-related only). Kept entirely separate
+   from struct winlist_t / game.winlist above: the original winlist (protocol,
+   /winlist command, TetriNET client display) is never touched by this -- these
+   extra metrics are only ever exported to the plain-text CSV winlist file. */
+struct winliststats_t {
+  char status;				/* Type. p=player, t=team (same key as winlist_t) */
+  char name[NICKLEN+1];			/* Name of player/team */
+  unsigned long wins;			/* Number of victories */
+  time_t last_win;			/* Timestamp of the most recent victory */
+  int best_level;			/* Highest level reached in any winning game */
+  unsigned long level_sum;		/* Sum of levels reached across all victories (for the average) */
+  char inuse;				/* 1=inuse 0=available */
+};
 
+/* One registered admin account (nickname + password). Authenticating with
+   /op or /admin implicitly uses the already-connected player's nickname
+   (n->nick) as the "username" -- see check_admin_login(). */
+struct admin_t {
+  char nick[NICKLEN+1];			/* Admin's login nickname (matched case-insensitively) */
+  char password[PASSLEN+1];		/* Admin's password (matched case-sensitively) */
+  char inuse;				/* 1=inuse 0=available */
+};
+
+/* One ban entry: either an IP (pattern, wildcards allowed, same syntax the
+   original game.ban already supported) or a nickname. /ban always creates
+   one of each type for the target being banned. */
+struct ban_t {
+  char type;				/* BAN_TYPE_IP or BAN_TYPE_NICK */
+  char target[UHOSTLEN+1];		/* IP pattern, or nickname, being banned */
+  time_t when;				/* Timestamp of when the ban was applied */
+  char admin[NICKLEN+1];		/* Nickname of the admin who applied it */
+  char reason[BANREASONLEN+1];		/* Free-text reason */
+  char inuse;				/* 1=inuse 0=available */
+};
+
+/* Tracks a nickname temporarily blocked from rejoining a specific room after
+   being /kick'ed from it. Keyed by nickname (not by connection), so the
+   block survives a disconnect/reconnect during the cooldown window. */
+struct kick_cooldown_t {
+  char nick[NICKLEN+1];			/* Nickname that was kicked */
+  char channel_name[CHANLEN+1];		/* Room they're blocked from rejoining */
+  time_t expires;			/* Timestamp when the block expires */
+  char inuse;				/* 1=inuse 0=available */
+};
 
 /* Security structure */
 struct security_t {
-  char op_password[PASSLEN+1];		/* Password to take ops */
+  struct admin_t adminlist[MAXADMINS];	/* Registered admin accounts (nickname+password each) */
 };
 
 
@@ -284,7 +343,10 @@ struct security_t {
 struct net_t *gnet;			/* Start of global "socket" information */
 struct game_t game;			/* Game Configuration */
 struct winlist_t winlist[MAXWINLIST];	/* Winlist */
+struct winliststats_t winliststats[MAXWINLISTSTATS];	/* Extended (victory-only) winlist metrics */
 struct security_t security;		/* Security structure */
+struct ban_t banlist[MAXBANS];		/* Ban list (IP + nickname entries) */
+struct kick_cooldown_t kick_cooldowns[MAXKICKCOOLDOWNS];	/* Active kick-cooldowns (nickname+room) */
 struct channel_t *chanlist;		/* Channel structure */
 
 /* And the proto types */

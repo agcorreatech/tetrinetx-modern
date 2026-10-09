@@ -137,13 +137,16 @@ void writepid(void)
     file_out = fopen(game.pidfile,"w");
     if (file_out == NULL)
       {
-        lvprintf(0,"ERROR: Could not write to PID file %s\n", game.pidfile);
+        lvprintf(0,"BOOT: ERROR: Could not write to PID file %s (%s)\n", game.pidfile, strerror(errno));
       }
     else
       {
         fprintf(file_out,"%d", getpid());
         fclose(file_out);
-        lvprintf(9,"Wrote PID to file %s\n", game.pidfile);
+        /* Priority 1 (was 9) so this always makes the log at default
+           verbosity: it's the "daemon is alive" milestone the pre-fork
+           BOOT messages tell the user to look for. */
+        lvprintf(1,"BOOT: Daemon running (pid %d). Wrote PID to file %s. Startup complete.\n", getpid(), game.pidfile);
       }
   }
 
@@ -203,44 +206,12 @@ int numchannels(void)
   }
 
 
-
-/* is_banned( net ) - Returns 1 if the IP of the player is banned */
-char is_banned(struct net_t *n)
-  { /* I should use regex, but I've not used it before, and it was late. Easier to write a quick one of my own */
-    FILE *file_in;
-    char n1[4], n2[4], n3[4], n4[4];
-    char ip1[4], ip2[4], ip3[4], ip4[4];
-    int i; int found;
-    
-    file_in = fopen(FILE_BAN,"r");
-    if (file_in == NULL)
-      return(0);
-      
-    sprintf(n1,"%lu", (unsigned long)(n->addr&0xff000000)/(unsigned long)0x1000000);
-    sprintf(n2,"%lu", (unsigned long)(n->addr&0x00ff0000)/(unsigned long)0x10000);
-    sprintf(n3,"%lu", (unsigned long)(n->addr&0x0000ff00)/(unsigned long)0x100);
-    sprintf(n4,"%lu", (unsigned long)n->addr&0x000000ff);
-    
-    found = 0;
-    while (!found && !feof(file_in))
-      {  
-        /* Read in line by line, and match regular expressions with the IP of sock_index */    
-        i = fscanf(file_in," %4[0-9*] . %4[0-9*] . %4[0-9*] . %4[0-9*] \n", ip1, ip2, ip3, ip4);
-        if (i == 4)
-          {
-            if (     ((!strcmp(n1,ip1)) || (!strcmp(ip1,"*")))
-                  && ((!strcmp(n2,ip2)) || (!strcmp(ip2,"*")))
-                  && ((!strcmp(n3,ip3)) || (!strcmp(ip3,"*")))
-                  && ((!strcmp(n4,ip4)) || (!strcmp(ip4,"*")))
-               )
-              {/* Matches! */
-                found=1;
-              }                
-          }
-      }
-    fclose(file_in);
-    return(found);
-  }
+/* NOTE: is_banned() used to live here. It's been replaced by is_ip_banned()
+   and is_nick_banned() (src/game.c), which check the in-memory banlist[]
+   (loaded from game.ban) instead of re-reading the file on every connection,
+   and which also support nickname bans in addition to IP bans. See
+   net_telnet() (IP check, right after accept()) and net_connected() (nick
+   check, once the client's chosen nickname is known). */
 
 /* is_op( net ) - Returns 1 if this player is the lowest gameslot, thus the chanop */
 char is_op(struct net_t *n)
@@ -277,11 +248,338 @@ char passed_level(struct net_t *n, int passlevel)
     return( currlevel >= passlevel);
   }
 
-/* kick(net from, player to be kicked) - Disconnects player, and informs all others that they were kicked */
+/* can_use_set(n) - /set has a special bonus rule on top of the normal
+   passed_level() check (see its handler): authenticated ops always pass,
+   AND chanops (OP by position) pass too as long as the channel isn't a
+   preset/persistent one (game.command_set==4 signals this bonus rule).
+   /help needs this exact same check to decide whether to show /set --
+   a naive passed_level(n,game.command_set) would hide /set from EVERYONE,
+   since command_set==4 is not a real, reachable security level. */
+char can_use_set(struct net_t *n)
+  {
+    return ( passed_level(n,game.command_set)
+             || ( (passed_level(n,LEVEL_AUTHOP) || (passed_level(n,LEVEL_OP) && !n->channel->persistant))
+                  && (game.command_set==4) ) );
+  }
+
+/* can_use_kick(n) - /kick also has a bonus rule on top of the normal
+   level check: an authenticated admin can ALWAYS use it, even if the
+   server owner has set command_kick=0 (disabled for everyone else).
+   /help needs this exact same check -- a naive
+   passed_level(n,game.command_kick) would show /kick to every player
+   whenever command_kick==0 (since passed_level(n,0) is trivially true
+   for anyone), which is backwards: 0 means disabled, not "everyone". */
+char can_use_kick(struct net_t *n)
+  {
+    return ( (game.command_kick>0 && passed_level(n,game.command_kick)) || passed_level(n,LEVEL_AUTHOP) );
+  }
+
+/* help_table[] - Data-driven list of every built-in command, used by /help.
+   Each row is shown only if the REQUESTING player currently passes its
+   check (custom_check if set, otherwise passed_level(n,*level_ptr); a NULL
+   level_ptr with no custom_check means "always shown", e.g. /me). Rows
+   with admin_section=1 are grouped under a separate "Admin Commands"
+   header, which itself only appears if at least one such row currently
+   qualifies -- so regular players never see an empty admin header. */
+struct help_entry_t {
+  char *usage;
+  char *description;
+  int  *level_ptr;
+  char (*custom_check)(struct net_t *n);
+  char admin_section;
+};
+
+struct help_entry_t help_table[] = {
+  /* --- General commands --- */
+  { "/who",                          "Lists connected players",                    &game.command_who,        NULL, 0 },
+  { "/whois <nickname>",             "Shows detailed info about a player",         &game.command_whois,      NULL, 0 },
+  { "/winlist [n]",                  "Shows top n winlist entries",                &game.command_winlist,    NULL, 0 },
+  { "/motd",                         "Displays the welcome message",               &game.command_motd,       NULL, 0 },
+  { "/msg <playernumber(s)> <msg>",  "Privately messages player(s)",               &game.command_msg,        NULL, 0 },
+  { "/me <action>",                  "Performs an action",                         NULL,                     NULL, 0 },
+  { "/list",                         "Lists available virtual TetriNET channels",  &game.command_list,       NULL, 0 },
+  { "/join <#channel|number>",       "Joins or creates a virtual tetrinet channel",&game.command_join,       NULL, 0 },
+  { "/topic <text>",                 "Changes the channel topic",                  &game.command_topic,      NULL, 0 },
+  { "/move <playernum> <newnum>",    "Moves a player to a new player number",      &game.command_move,       NULL, 0 },
+  { "/set help",                     "Shows/changes channel config options",       NULL,                     can_use_set, 0 },
+  { "/op <password>",                "Gain AUTHENTICATED OP status",               &game.command_op,         NULL, 0 },
+  { "/admin <password>",             "Gain AUTHENTICATED OP status (alias /op)",   &game.command_op,         NULL, 0 },
+  { "/kick <playernumber(s)>",       "Kicks player(s) to the server's lobby",      NULL,                     can_use_kick, 0 },
+
+  /* --- Admin commands (only shown once authenticated via /op or /admin) --- */
+  { "/priority <1-99>",              "Changes channel priority",                   &game.command_priority,   NULL, 1 },
+  { "/clear",                        "Clears the winlist",                         &game.command_clear,      NULL, 1 },
+  { "/persistant <0/1>",             "Makes a channel persistant",                 &game.command_persistant, NULL, 1 },
+  { "/save",                        "Saves game config and persistant channels",  &game.command_save,       NULL, 1 },
+  { "/reset",                        "Reloads config from game.conf",              &game.command_reset,      NULL, 1 },
+  { "/ban <playernumber> [reason]",  "Bans a player's IP and nickname",            &game.command_ban,        NULL, 1 },
+  { "/unban ip|nick <target>",       "Removes a ban entry",                        &game.command_ban,        NULL, 1 },
+  { "/banlist",                     "Lists all active bans",                       &game.command_banlist,    NULL, 1 },
+
+  { NULL, NULL, NULL, NULL, 0 }
+};
+
+/* create_channel(name, persistant) - Allocates and appends a new channel
+   with default settings (mirrors the "new channel" branch already used by
+   /join, but written as its own function for reuse by the lobby-redirect
+   feature below; /join's own inline channel-creation code is left exactly
+   as-is, to avoid any risk of regressing that already-working path). */
+struct channel_t *create_channel(char *name, char persistant)
+  {
+    struct channel_t *chan;
+
+    chan = chanlist;
+    if (chan == NULL)
+      {
+        chanlist = malloc(sizeof(struct channel_t));
+        chan = chanlist;
+      }
+    else
+      {
+        while (chan->next != NULL) chan = chan->next;
+        chan->next = malloc(sizeof(struct channel_t));
+        chan = chan->next;
+      }
+
+    chan->next = NULL;
+    chan->net = NULL;
+    strncpy(chan->name, name, CHANLEN-1); chan->name[CHANLEN-1]=0;
+    chan->maxplayers = DEFAULTMAXPLAYERS;
+    chan->status = STATE_ONLINE;
+    chan->description[0] = 0;
+    chan->priority = DEFAULTPRIORITY;
+    chan->sd_mode = SD_NONE;
+    chan->persistant = persistant;
+
+    chan->starting_level=game.starting_level;
+    chan->lines_per_level=game.lines_per_level;
+    chan->level_increase=game.level_increase;
+    chan->lines_per_special=game.lines_per_special;
+    chan->special_added=game.special_added;
+    chan->special_capacity=game.special_capacity;
+    chan->classic_rules=game.classic_rules;
+    chan->average_levels=game.average_levels;
+    chan->sd_timeout=game.sd_timeout;
+    chan->sd_lines_per_add=game.sd_lines_per_add;
+    chan->sd_secs_between_lines=game.sd_secs_between_lines;
+    strcpy(chan->sd_message,game.sd_message);
+    chan->block_leftl=game.block_leftl;
+    chan->block_leftz=game.block_leftz;
+    chan->block_square=game.block_square;
+    chan->block_rightl=game.block_rightl;
+    chan->block_rightz=game.block_rightz;
+    chan->block_halfcross=game.block_halfcross;
+    chan->block_line=game.block_line;
+    chan->special_addline=game.special_addline;
+    chan->special_clearline=game.special_clearline;
+    chan->special_nukefield=game.special_nukefield;
+    chan->special_randomclear=game.special_randomclear;
+    chan->special_switchfield=game.special_switchfield;
+    chan->special_clearspecial=game.special_clearspecial;
+    chan->special_gravity=game.special_gravity;
+    chan->special_quakefield=game.special_quakefield;
+    chan->special_blockbomb=game.special_blockbomb;
+    chan->stripcolour=game.stripcolour;
+    chan->serverannounce=game.serverannounce;
+    chan->pingintercept=game.pingintercept;
+
+    return chan;
+  }
+
+/* find_or_create_lobby_channel(exclude_chan) - Finds (or creates) a
+   persistent "Lobby" variant (Lobby, Lobby1, Lobby2, ...) that has room
+   and is NOT exclude_chan (the room a player is being kicked from). Trying
+   the base name first, then numbered variants, naturally handles both
+   "Lobby is full" and "the player is being kicked FROM Lobby itself"
+   without any special-casing. Returns NULL only in the extreme case where
+   the server's channel limit (maxchannels) is reached and no existing
+   variant has room either. */
+struct channel_t *find_or_create_lobby_channel(struct channel_t *exclude_chan)
+  {
+    struct channel_t *chan;
+    char candidate_name[64];
+    char base_name[CHANLEN+1];
+    int suffix;
+
+    for (suffix=0; suffix<=MAXLOBBYVARIANTS; suffix++)
+      {
+        if (suffix==0)
+          { strncpy(candidate_name, game.main_channel_name, sizeof(candidate_name)-1); candidate_name[sizeof(candidate_name)-1]=0; }
+        else
+          {
+            /* Reserve room for the numeric suffix so the base name is never
+               truncated into the digits (chan->name itself is bounded
+               properly inside create_channel() regardless) */
+            strncpy(base_name, game.main_channel_name, CHANLEN-3); base_name[CHANLEN-3]=0;
+            sprintf(candidate_name, "%s%d", base_name, suffix);
+          }
+
+        chan = chanlist;
+        while ( (chan!=NULL) && strcasecmp(chan->name, candidate_name) )
+          chan = chan->next;
+
+        if (chan != NULL)
+          {
+            if ( (chan != exclude_chan) && (numplayers(chan) < chan->maxplayers) )
+              return chan;
+            /* full, or it's the room we're excluding -- try the next variant */
+          }
+        else
+          {
+            if (numchannels() >= game.maxchannels)
+              break;
+            return create_channel(candidate_name, 1);
+          }
+      }
+
+    lvprintf(1,"WARNING: No lobby variant available to redirect a kicked player (maxchannels reached)\n");
+    return NULL;
+  }
+
+/* move_player_to_channel(n, new_chan) - Moves an already-connected player
+   from their current channel into new_chan, replaying the same protocol
+   sequence /join already sends a player when switching channels
+   (playerleave/playerjoin/team/playernum, field resync if the new channel
+   has a game in progress, and old-channel game-end/cleanup bookkeeping).
+   Written as its own self-contained function (rather than refactoring
+   /join's existing handler in place) specifically to avoid any risk of
+   regressing that already-working, delicate protocol code path -- /join
+   itself is completely untouched by this change. */
+void move_player_to_channel(struct net_t *n, struct channel_t *new_chan)
+  {
+    struct channel_t *ochan, *c, *oc;
+    struct net_t *nsock;
+    int num1, num2, num3, num4;
+    int x, y;
+
+    ochan = n->channel;
+    if (ochan == new_chan) return;   /* nowhere to move */
+
+    if ( (ochan->status == STATE_INGAME) || (ochan->status == STATE_PAUSED) )
+      {
+        n->status = STAT_NOTPLAYING;
+        tprintf(n->sock,"endgame\xff");
+      }
+
+    for (y=0;y<FIELD_MAXY;y++)
+      for (x=0;x<FIELD_MAXX;x++)
+        n->field[x][y]=0;
+
+    num1 = n->gameslot;
+    num2 = 0; num3 = 1;
+    while ( (num2 < new_chan->maxplayers) && (num3) )
+      {
+        num2++;
+        num3 = 0;
+        nsock = new_chan->net;
+        while (nsock!=NULL)
+          {
+            if ( (nsock!=n) && ((nsock->type==NET_CONNECTED)||(nsock->type==NET_WAITINGFORTEAM)) && (nsock->gameslot==num2) )
+              num3=1;
+            nsock=nsock->next;
+          }
+      }
+    if (num3==1)
+      { /* Extremely unlikely (destination channel already full) -- bail out safely */
+        lvprintf(0,"#%s-%s: No free gameslot in #%s to move player into\n", ochan->name, n->nick, new_chan->name);
+        return;
+      }
+
+    tprintf(n->sock,"playerleave %d\xff", n->gameslot);
+    nsock = ochan->net;
+    num4 = 0;
+    while (nsock!=NULL)
+      {
+        if ( (nsock!=n) && (nsock->type==NET_CONNECTED) )
+          {
+            tprintf(nsock->sock,"playerleave %d\xff", num1);
+            if (nsock->status==STAT_PLAYING) num4++;
+          }
+        nsock=nsock->next;
+      }
+
+    remnet(ochan, n);
+    n->channel = new_chan;
+    n->gameslot = num2;
+    addnet(new_chan, n);
+
+    nsock = new_chan->net;
+    while (nsock!=NULL)
+      {
+        if ( (nsock!=n) && (nsock->type==NET_CONNECTED) )
+          {
+            tprintf(n->sock, "playerjoin %d %s\xffteam %d %s\xff", nsock->gameslot, nsock->nick, nsock->gameslot, nsock->team);
+            tprintf(nsock->sock, "playerjoin %d %s\xffteam %d %s\xff", n->gameslot, n->nick, n->gameslot, n->team);
+            tprintf(nsock->sock,"pline 0 %c%s%c %chas joined channel #%s\xff", GREEN,n->nick,BLACK,GREEN,new_chan->name);
+          }
+        nsock=nsock->next;
+      }
+
+    tprintf(n->sock, "playernum %d\xff", n->gameslot);
+
+    if ( (new_chan->status == STATE_INGAME) || (new_chan->status == STATE_PAUSED) )
+      {
+        nsock = new_chan->net;
+        while (nsock!=NULL)
+          {
+            if ( (nsock->type==NET_CONNECTED) && (nsock!=n) )
+              {
+                if (nsock->status != STAT_PLAYING)
+                  tprintf(n->sock,"playerlost %d\xff", nsock->gameslot);
+                sendfield(n, nsock);
+              }
+            nsock=nsock->next;
+          }
+        tprintf(n->sock,"ingame\xff");
+        if (new_chan->status == STATE_PAUSED)
+          tprintf(n->sock,"pause 1\xff");
+      }
+
+    if ( (num4 <= 1) && (ochan->status == STATE_INGAME) )
+      {
+        nsock = ochan->net;
+        while (nsock!=NULL)
+          {
+            if (nsock->type == NET_CONNECTED)
+              {
+                tprintf(nsock->sock,"endgame\xff");
+                nsock->status=STAT_NOTPLAYING;
+                nsock->timeout=game.timeout_outgame;
+              }
+            nsock=nsock->next;
+          }
+        ochan->status = STATE_ONLINE;
+      }
+
+    if ( (numallplayers(ochan) == 0) && (!ochan->persistant) )
+      {
+        c=chanlist; oc=NULL;
+        while ( (c!=NULL) && (c!=ochan) )
+          { oc=c; c=c->next; }
+        if (c!=NULL)
+          {
+            if (oc!=NULL) oc->next=c->next; else chanlist=c->next;
+            free(c);
+          }
+      }
+
+    n->timeout = game.timeout_outgame;
+    n->status = (n->channel->status==STATE_ONLINE) ? STAT_NOTPLAYING : STAT_LOST;
+  }
+
+/* kick(net from, player to be kicked) - BEHAVIOUR CHANGE: kicked players
+   are no longer disconnected. Instead they're redirected to the server's
+   "lobby" (game.main_channel_name, with Lobby1/Lobby2/... variants used
+   automatically if full or if that's the room being kicked from), and
+   blocked from rejoining the specific room they were kicked from for
+   KICK_COOLDOWN_SECS (5 minutes), by nickname -- surviving a
+   disconnect/reconnect. */
 void kick(struct net_t *n_from, int kick_gameslot)
   {
     struct net_t *n;
     struct net_t *n_to;
+    struct channel_t *lobby;
+    char from_channel_name[CHANLEN+1];
     
     n=n_from->channel->net;
     n_to=NULL;
@@ -291,20 +589,40 @@ void kick(struct net_t *n_from, int kick_gameslot)
           n_to = n;
         n=n->next;
       }
-    if ((n_to!=NULL) && (kick_gameslot>=1) && (kick_gameslot<=6))
+    if ( (n_to==NULL) || (kick_gameslot<1) || (kick_gameslot>6) )
+      return;
+
+    strncpy(from_channel_name, n_from->channel->name, CHANLEN); from_channel_name[CHANLEN]=0;
+
+    lvprintf(4,"#%s-%s: Kicked %s from #%s\n",n_from->channel->name,n_from->nick,n_to->nick,from_channel_name);
+    n=n_from->channel->net;
+    while (n!=NULL)
       {
-        lvprintf(4,"#%s-%s: Kicked %s from server\n",n_from->channel->name,n_from->nick,n_to->nick);
-        n=n_from->channel->net;
-        while (n!=NULL)
+        if ( ((n->type == NET_CONNECTED) || (n->type == NET_WAITINGFORTEAM))) 
           {
-            if ( ((n->type == NET_CONNECTED) || (n->type == NET_WAITINGFORTEAM))) 
-              {
-                tprintf(n->sock,"kick %d\xff", kick_gameslot);
-              }
-            n=n->next;
+            tprintf(n->sock,"kick %d\xff", kick_gameslot);
           }
-        killsock(n_to->sock); lostnet(n_to);
+        n=n->next;
       }
+
+    /* Block this nickname from rejoining THIS room for 5 minutes -- by
+       nickname, so it survives a disconnect/reconnect */
+    add_kick_cooldown(n_to->nick, from_channel_name, time(NULL)+KICK_COOLDOWN_SECS);
+
+    lobby = find_or_create_lobby_channel(n_from->channel);
+
+    if (lobby == NULL)
+      { /* Extreme fallback: no lobby room available anywhere -- disconnect,
+           same as the server's old kick behaviour */
+        tprintf(n_to->sock,"pline 0 %cYou were kicked and no lobby room was available.\xff", RED);
+        killsock(n_to->sock); lostnet(n_to);
+        return;
+      }
+
+    tprintf(n_to->sock,"pline 0 %cYou were kicked from #%s. You cannot rejoin this room for 5 minutes.\xff", RED, from_channel_name);
+    tprintf(n_to->sock,"pline 0 %cYou have been moved to #%s.\xff", GREEN, lobby->name);
+
+    move_player_to_channel(n_to, lobby);
   }
 
 /* tet_checkversion( client version ) - Returns 0 if the server supports this */
@@ -325,7 +643,7 @@ void lvprintf(int priority, char *format,...)
 { /* No bounds checking. Be very careful what you log */
   va_list va; static char SBUF2[768];
   va_start(va,format);
-  vsprintf(SBUF2,format,va);
+  vsnprintf(SBUF2,sizeof(SBUF2),format,va);
   if (strlen(SBUF2)>512)
     {
       SBUF2[512]=0;   /* truncate string. Of course, by now we have buffer overrun ;) */
@@ -346,7 +664,7 @@ void lprintf(char *format,...)
   char *P;
   time_t cur_time;
   va_start(va,format);
-  vsprintf(SBUF2,format,va);
+  vsnprintf(SBUF2,sizeof(SBUF2),format,va);
    
   file_out = fopen(FILE_LOG,"a");
   if (file_out != NULL)
@@ -361,6 +679,92 @@ void lprintf(char *format,...)
     }
   va_end(va);
 }
+
+/* --------------------------------------------------------------------- */
+/* Startup (boot) debug logging.                                          */
+/*                                                                        */
+/* Everything below runs BEFORE the server daemonizes (before the fork    */
+/* that closes stdin/stdout/stderr), so messages are printed to BOTH      */
+/* stdout (visible when starting from a terminal, or captured by systemd  */
+/* / docker logs) AND the game.log file. This dual output matters         */
+/* because the two most common startup-failure scenarios blind exactly    */
+/* one of the two channels each:                                          */
+/*   - a non-writable working directory silently disables game.log        */
+/*     entirely (lprintf() ignores fopen() failures), so stdout is the    */
+/*     only place the error can appear;                                   */
+/*   - a service manager starting the binary detached from a terminal     */
+/*     hides stdout, so game.log is the only place the error can appear.  */
+/* --------------------------------------------------------------------- */
+
+static int boot_log_broken = 0;   /* set once we detect game.log isn't writable */
+
+/* boot_debug(fmt, ...) - Logs one startup step to stdout + game.log,
+   prefixed with "BOOT:" so startup lines are easy to grep. */
+void boot_debug(char *format,...)
+  {
+    va_list va; static char SBUF3[768];
+    FILE *probe;
+
+    va_start(va,format);
+    vsnprintf(SBUF3,sizeof(SBUF3),format,va);
+    va_end(va);
+
+    printf("BOOT: %s\n", SBUF3);
+    fflush(stdout);
+
+    /* lprintf() silently does nothing when game.log can't be opened for
+       append -- detect that once and say so loudly on stdout, otherwise
+       the user is left staring at an empty/missing log wondering why. */
+    if (!boot_log_broken)
+      {
+        probe = fopen(FILE_LOG,"a");
+        if (probe == NULL)
+          {
+            boot_log_broken = 1;
+            printf("BOOT: WARNING: cannot open %s for writing (%s) -- startup messages will appear on stdout ONLY. Check current directory and permissions: the server reads/writes ALL its files (game.conf, game.log, game.pid, ...) relative to the directory it is started FROM.\n",
+                   FILE_LOG, strerror(errno));
+            fflush(stdout);
+          }
+        else
+          fclose(probe);
+      }
+
+    if (!boot_log_broken)
+      lprintf("BOOT: %s\n", SBUF3);
+  }
+
+/* boot_check_environment() - Early, explicit checks for the most common
+   startup-failure causes, each with a clear message saying exactly what
+   is wrong and how to fix it -- instead of a generic failure later on. */
+void boot_check_environment(void)
+  {
+    FILE *probe;
+    char cwd[512];
+
+    if (getcwd(cwd, sizeof(cwd)) != NULL)
+      boot_debug("Working directory: %s (all game.* files are read/written here)", cwd);
+    else
+      boot_debug("Working directory: (could not determine: %s)", strerror(errno));
+
+    /* Can we write here at all? This single check predicts failures in
+       gamewrite(), writepid(), write_motd(), securitywrite(), the log
+       itself, the winlist, and the CSV export -- all in one message. */
+    probe = fopen(".tetrinetx.write-test","w");
+    if (probe == NULL)
+      {
+        printf("BOOT: FATAL: current directory is not writable (%s).\n", strerror(errno));
+        printf("BOOT: The server creates/updates its files (game.conf, game.log, game.pid,\n");
+        printf("BOOT: game.secure, game.winlist, ...) in the directory it is started FROM.\n");
+        printf("BOOT: Fix: cd to a directory the server's user can write to (e.g. the bin/\n");
+        printf("BOOT: folder you installed to), or fix its permissions, then start again.\n");
+        fflush(stdout);
+        exit(1);
+      }
+    fclose(probe);
+    remove(".tetrinetx.write-test");
+    boot_debug("Working directory is writable: OK");
+  }
+
 
 /* Open a Listening Socket on the TetriNET port */
 void init_telnet_port()
@@ -382,7 +786,7 @@ void init_telnet_port()
     n->addr=getmyip();
     n->type=NET_TELNET;
     strcpy(n->nick,"(telnet)");
-    getmyhostname(n->host);
+    getmyhostname(n->host,sizeof(n->host));
   }
   else {
     /* already an entry */
@@ -398,8 +802,13 @@ void init_telnet_port()
     lvprintf(3,"Listening at telnet port %d, on socket %d, bound to %s\n", j,i,game.bindip);
     return;
   }
-  printf("Couldn't find telnet port %d. (is the server already running?)\n",j);
-  lvprintf(0,"Couldn't find telnet port %d.\n", j);
+  printf("BOOT: FATAL: could not bind/listen on game port %d (bind address: %s).\n", j, game.bindip);
+  printf("BOOT: Most common causes:\n");
+  printf("BOOT:   - the server is ALREADY running (check: pgrep -af tetrix / cat game.pid)\n");
+  printf("BOOT:   - another process is using port %d (check: ss -tlnp | grep %d)\n", j, j);
+  printf("BOOT:   - bindip in game.conf points to an IP this machine doesn't have (current: %s)\n", game.bindip);
+  fflush(stdout);
+  lvprintf(0,"BOOT: FATAL: could not bind/listen on game port %d (bindip: %s). Already running, port in use, or bad bindip in game.conf.\n", j, game.bindip);
   exit(1);
 }
 
@@ -423,7 +832,7 @@ void init_query_port()
     n->addr=getmyip();
     n->type=NET_QUERY;
     strcpy(n->nick,"(telnet)");
-    getmyhostname(n->host);
+    getmyhostname(n->host,sizeof(n->host));
   }
   else {
     /* already an entry */
@@ -547,9 +956,14 @@ int strclen(char *S)
                       && (S[i] != YELLOW)
                       && (S[i] != UNDERLINE) )
                 count++;
-        i++;  
+        i++;
       }
-    return(i);
+    /* BUGFIX: returned i (the full length, colour codes included) instead of
+       count (the visible length this function is documented to compute and
+       was accumulating but never returning). /who relied on this to pad
+       nick/team columns to a fixed VISIBLE width, so any name carrying
+       colour codes was mis-aligned. */
+    return(count);
   }
 
 /* Connected, recieving commands */
@@ -584,10 +998,19 @@ void net_connected(struct net_t *n, char *buf)
               {
                 valid_param=1;
                 /* First parse to see if it's a server command */
-                if ( !strncasecmp(MSG, "/kick", 5) && (game.command_kick > 0))
+                /* /kick stays at its default chanop-level requirement
+                   (command_kick=2) for everyone else, but an authenticated
+                   admin (/op or /admin) can ALWAYS use it, regardless of
+                   how command_kick is configured -- including the server
+                   owner setting command_kick=0 to disable it for everyone
+                   else. Without the "|| passed_level(n,LEVEL_AUTHOP)" on
+                   the outer gate, command_kick=0 would block admins too,
+                   since that check runs before passed_level() is ever
+                   consulted. */
+                if ( !strncasecmp(MSG, "/kick", 5) && ( (game.command_kick > 0) || passed_level(n,LEVEL_AUTHOP) ) )
                   {
                     valid_param=2;
-                    if ( passed_level(n,game.command_kick) )
+                    if ( (game.command_kick>0 && passed_level(n,game.command_kick)) || passed_level(n,LEVEL_AUTHOP) )
                       {
                         P=MSG+6;
                         while( (((*P)-'0') >= 1) && (((*P)-'0') <= 6) )
@@ -600,6 +1023,198 @@ void net_connected(struct net_t *n, char *buf)
                     else
                       tprintf(n->sock,"pline 0 %cYou do NOT have access to that command!\xff",RED);
                    
+                  }
+
+                /* Ban - /ban <playernumber> [reason] - bans the target's IP AND
+                   nickname (two separate ban entries), notifies the channel,
+                   and disconnects them for real (unlike /kick, which only
+                   redirects to the lobby -- a ban means they can't reconnect
+                   at all until /unban'ed). */
+                /* Boundary check ("ban"[4] must be end-of-string or a
+                   space): without it, "/banlist" also starts with "/ban"
+                   and would trigger THIS handler too, dumping a spurious
+                   "Usage: /ban <playernumber> [reason]" alongside the
+                   actual banlist output. Same class of bug as /who vs
+                   /whois above. */
+                if ( !strncasecmp(MSG, "/ban", 4) && (MSG[4]=='\0' || MSG[4]==' ') && (game.command_ban>0) )
+                  {
+                    valid_param=2;
+                    if ( passed_level(n,game.command_ban) )
+                      {
+                        char ban_reason[BANREASONLEN+1];
+                        char ip_str[16];
+                        struct net_t *n_to;
+
+                        P=MSG+5;
+                        ban_reason[0]=0;
+                        s=sscanf(P,"%d %120[^\n\r]",&num,ban_reason);
+                        if (s<2) strncpy(ban_reason,"No reason given",BANREASONLEN-1), ban_reason[BANREASONLEN-1]=0;
+
+                        n_to=NULL;
+                        if ( (s>=1) && (num>=1) && (num<=6) )
+                          {
+                            nsock=n->channel->net;
+                            while (nsock!=NULL)
+                              {
+                                if ( (nsock->gameslot==num) && ((nsock->type==NET_CONNECTED)||(nsock->type==NET_WAITINGFORTEAM)) )
+                                  n_to = nsock;
+                                nsock=nsock->next;
+                              }
+                          }
+
+                        if (n_to==NULL)
+                          tprintf(n->sock,"pline 0 %cUsage: /ban <playernumber> [reason]\xff", RED);
+                        else
+                          {
+                            sprintf(ip_str, "%lu.%lu.%lu.%lu",
+                                    (unsigned long)(n_to->addr&0xff000000)/(unsigned long)0x1000000,
+                                    (unsigned long)(n_to->addr&0x00ff0000)/(unsigned long)0x10000,
+                                    (unsigned long)(n_to->addr&0x0000ff00)/(unsigned long)0x100,
+                                    (unsigned long)n_to->addr&0x000000ff);
+
+                            add_ban(BAN_TYPE_IP,   ip_str,      n->nick, ban_reason);
+                            add_ban(BAN_TYPE_NICK, n_to->nick,  n->nick, ban_reason);
+
+                            lvprintf(2,"#%s-%s: Banned %s (%s) [reason: %s]\n",
+                                     n->channel->name, n->nick, n_to->nick, ip_str, ban_reason);
+
+                            nsock=n->channel->net;
+                            while (nsock!=NULL)
+                              {
+                                if ( (nsock->type==NET_CONNECTED) || (nsock->type==NET_WAITINGFORTEAM) )
+                                  tprintf(nsock->sock,"pline 0 %c%s%c was banned (%s)\xff", RED, n_to->nick, BLACK, ban_reason);
+                                nsock=nsock->next;
+                              }
+
+                            tprintf(n_to->sock,"pline 0 %cYou have been banned: %s\xff", RED, ban_reason);
+                            killsock(n_to->sock);
+                            lostnet(n_to);
+                          }
+                      }
+                    else
+                      tprintf(n->sock,"pline 0 %cYou do NOT have access to that command!\xff",RED);
+                  }
+
+                /* Unban - /unban ip <ip>  OR  /unban nick <nickname> */
+                if ( !strncasecmp(MSG, "/unban", 6) && (game.command_ban>0) )
+                  {
+                    valid_param=2;
+                    if ( passed_level(n,game.command_ban) )
+                      {
+                        char unban_kind[11];
+                        char unban_target[BANREASONLEN+1];
+                        char btype;
+
+                        P=MSG+7;
+                        unban_kind[0]=0; unban_target[0]=0;
+                        s=sscanf(P,"%10s %120[^\n\r]", unban_kind, unban_target);
+
+                        btype=0;
+                        if (!strcasecmp(unban_kind,"ip"))   btype=BAN_TYPE_IP;
+                        if (!strcasecmp(unban_kind,"nick"))  btype=BAN_TYPE_NICK;
+
+                        if ( (s<2) || (btype==0) )
+                          tprintf(n->sock,"pline 0 %cUsage: /unban ip <ip>  OR  /unban nick <nickname>\xff", RED);
+                        else if (remove_ban(btype, unban_target))
+                          {
+                            tprintf(n->sock,"pline 0 %cUnbanned (%s): %s\xff", GREEN, unban_kind, unban_target);
+                            lvprintf(2,"#%s-%s: Unbanned (%s) %s\n", n->channel->name, n->nick, unban_kind, unban_target);
+                          }
+                        else
+                          tprintf(n->sock,"pline 0 %cNo matching ban entry found for (%s): %s\xff", RED, unban_kind, unban_target);
+                      }
+                    else
+                      tprintf(n->sock,"pline 0 %cYou do NOT have access to that command!\xff",RED);
+                  }
+
+                /* Banlist - /banlist - lists all active bans. Admin-only:
+                   gated by game.command_banlist (defaults to AUTHOP-only). */
+                if ( !strncasecmp(MSG, "/banlist", 8) && (game.command_banlist>0) )
+                  {
+                    valid_param=2;
+                    if ( passed_level(n,game.command_banlist) )
+                      {
+                        char when_str[32];
+                        struct tm *tm_info;
+
+                        tprintf(n->sock,"pline 0 %cType\tTarget\t\tDate\t\tAdmin\tReason\xff", NAVY);
+                        for (i=0; i<MAXBANS; i++)
+                          {
+                            if (banlist[i].inuse)
+                              {
+                                tm_info = localtime(&banlist[i].when);
+                                strftime(when_str, sizeof(when_str), "%Y-%m-%d %H:%M:%S", tm_info);
+                                tprintf(n->sock,"pline 0 %c%s\t%s\t%s\t%s\t%s\xff",
+                                        BLACK,
+                                        (banlist[i].type==BAN_TYPE_IP ? "IP" : "NICK"),
+                                        banlist[i].target, when_str, banlist[i].admin, banlist[i].reason);
+                              }
+                          }
+                      }
+                    else
+                      tprintf(n->sock,"pline 0 %cYou do NOT have access to that command!\xff",RED);
+                  }
+
+                /* Whois - /whois <nickname> - detailed info about one player,
+                   searched across ALL channels (same scope /who already uses) */
+                if ( !strncasecmp(MSG, "/whois", 6) && (game.command_whois>0) )
+                  {
+                    valid_param=2;
+                    if ( passed_level(n,game.command_whois) )
+                      {
+                        char *statusdesc;
+                        char found_whois;
+
+                        /* Guard against reading past the terminator when no
+                           argument was given ("/whois" with nothing after).
+                           MSG+7 would point one byte beyond the '\0'. */
+                        P = (strlen(MSG) >= 7) ? MSG+7 : (char *)"";
+                        found_whois=0;
+                        chan=chanlist;
+                        while ( (chan!=NULL) && !found_whois )
+                          {
+                            nsock=chan->net;
+                            while ( (nsock!=NULL) && !found_whois )
+                              {
+                                if ( (nsock->type==NET_CONNECTED) && !strcasecmp(nsock->nick,P) )
+                                  {
+                                    found_whois=1;
+
+                                    /* Labels are left-padded to a fixed width (instead of a
+                                       single '\t' after each, which lands at wildly different
+                                       columns depending on the label's own length) so every
+                                       value lines up in the same column regardless of label
+                                       length -- "Client version:" is the longest at 16 chars. */
+                                    tprintf(n->sock,"pline 0 %cWhois: %s\xff", NAVY, nsock->nick);
+                                    tprintf(n->sock,"pline 0   %c%-17s%s\xff", BLACK, "Team:", nsock->team);
+                                    tprintf(n->sock,"pline 0   %c%-17s#%s\xff", BLACK, "Channel:", nsock->channel->name);
+                                    tprintf(n->sock,"pline 0   %c%-17s%d\xff", BLACK, "Slot:", nsock->gameslot);
+
+                                    switch (nsock->status)
+                                      {
+                                        case STAT_PLAYING: statusdesc="Playing"; break;
+                                        case STAT_LOST:     statusdesc="Lost (waiting for game to end)"; break;
+                                        default:            statusdesc="Not playing"; break;
+                                      }
+                                    tprintf(n->sock,"pline 0   %c%-17s%s\xff", BLACK, "Status:", statusdesc);
+
+                                    if (nsock->status==STAT_PLAYING)
+                                      tprintf(n->sock,"pline 0   %c%-17s%d\xff", BLACK, "Level:", nsock->level);
+
+                                    tprintf(n->sock,"pline 0   %c%-17s%s\xff", BLACK, "Client version:", nsock->version);
+
+                                    if (passed_level(n,LEVEL_AUTHOP))
+                                      tprintf(n->sock,"pline 0   %c%-17s%s\xff", BLACK, "Host/IP:", nsock->host);
+                                  }
+                                nsock=nsock->next;
+                              }
+                            chan=chan->next;
+                          }
+                        if (!found_whois)
+                          tprintf(n->sock,"pline 0 %cNo such player: %s\xff", RED, P);
+                      }
+                    else
+                      tprintf(n->sock,"pline 0 %cYou do NOT have access to that command!\xff",RED);
                   }
 
                 /* Set channel settings */
@@ -876,7 +1491,7 @@ void net_connected(struct net_t *n, char *buf)
                         P=MSG+7;
                         if (strlen(MSG)>=7)
                           {
-                            strncpy(n->channel->description, P, DESCRIPTIONLEN-1); n->channel->description[DESCRIPTIONLEN-1]=0;
+                            safe_strcpy(n->channel->description, DESCRIPTIONLEN, P);
                             lvprintf(4,"#%s-%s changed channel topic to %s\n",n->channel->name,n->nick,n->channel->description);
                             nsock=n->channel->net;
                             while (nsock!=NULL)
@@ -894,7 +1509,11 @@ void net_connected(struct net_t *n, char *buf)
                   }
                   
                 /* Who is online */
-                if ( !strncasecmp(MSG, "/who", 4) && (game.command_who>0))
+                /* Boundary check ("who"[4] must be end-of-string or a
+                   space): without it, "/whois <nick>" also starts with
+                   "/who" and would trigger THIS handler too, dumping an
+                   unwanted full player list right after the whois info. */
+                if ( !strncasecmp(MSG, "/who", 4) && (MSG[4]=='\0' || MSG[4]==' ') && (game.command_who>0))
                   {
                     valid_param=2;
                     if ( passed_level(n,game.command_who) )
@@ -962,8 +1581,11 @@ void net_connected(struct net_t *n, char *buf)
                     valid_param=2;
                     if ( passed_level(n,game.command_priority) )
                       {
-                        P=MSG+10;
-                        if ( (atoi(P) >= 0) && (atoi(P) < 100) )
+                        /* Guard against reading past the terminator when no
+                           argument was given; require a non-empty value so
+                           bare "/priority" doesn't silently set priority 0. */
+                        P = (strlen(MSG) >= 10) ? MSG+10 : (char *)"";
+                        if ( (P[0]!=0) && (atoi(P) >= 0) && (atoi(P) < 100) )
                           {
                             n->channel->priority=atoi(P);
                             lvprintf(4,"#%s-%s changed channel priority to %d\n",n->channel->name,n->nick,n->channel->priority);
@@ -987,7 +1609,10 @@ void net_connected(struct net_t *n, char *buf)
                   }
 
                 /* Show MOTD */
-                if ( !strncasecmp(MSG, "/motd", 5) && (game.command_list>0))
+                /* BUGFIX: was gated by game.command_list (copy/paste from the
+                   /list handler below); /motd has its own permission flag
+                   game.command_motd, which was being ignored entirely. */
+                if ( !strncasecmp(MSG, "/motd", 5) && (game.command_motd>0))
                   {
                     valid_param=2;
                     read_motd(n);
@@ -1080,6 +1705,10 @@ void net_connected(struct net_t *n, char *buf)
                             if ( (chan!=NULL) && (numplayers(chan)>=chan->maxplayers))
                               { /* A Full channel */
                                 tprintf(n->sock,"pline 0 %cThat channel is %cFULL%c!\xff", NAVY, RED,BLACK); 
+                              }
+                            else if ( (chan!=NULL) && is_kick_cooldown_active(n->nick, chan->name) )
+                              { /* Still blocked from rejoining this room after being kicked from it */
+                                tprintf(n->sock,"pline 0 %cYou were kicked from #%s and cannot rejoin it yet. Try again in a few minutes.\xff", RED, chan->name);
                               }
                             else if ( (chan==NULL) && (j>=0) && (numchannels() >= game.maxchannels))
                               { /* Too many channels */
@@ -1293,7 +1922,18 @@ void net_connected(struct net_t *n, char *buf)
                                     nsock=ochan->net;
                                     while (nsock!=NULL)
                                       {
-                                        if ( (nsock=n) && (nsock->type == NET_CONNECTED))
+                                        /* BUGFIX: this used to read "if ( (nsock=n) && ...)" -- an
+                                           assignment where a comparison was clearly intended. Two
+                                           problems: (1) it always evaluated true (an assignment
+                                           expression's value is the assigned value, non-NULL here),
+                                           and (2) it overwrote the loop iterator itself, so the very
+                                           next "nsock=nsock->next" advanced from n's position rather
+                                           than from where the loop actually was, corrupting the
+                                           traversal of ochan->net. No comparison against n is needed
+                                           here at all: by this point n has already been removed from
+                                           ochan->net (remnet(ochan,n) ran earlier in this same
+                                           handler), so it can never appear in this loop anyway. */
+                                        if (nsock->type == NET_CONNECTED)
                                           {
                                             tprintf(nsock->sock,"endgame\xff");
                                             nsock->status=STAT_NOTPLAYING;
@@ -1514,14 +2154,23 @@ void net_connected(struct net_t *n, char *buf)
                 
             
                 /* Take "ops" - Suggestion by (jawfx@hotmail.com 21/9/98) */
-                if ( !strncasecmp(MSG, "/op", 3) && (game.command_op>0))
+                /* /op <password>  and  /admin <password> - identical, /admin is just an alias.
+                   The "username" is implicit: it's the nickname this connection is ALREADY
+                   using (n->nick). Since nicknames are unique server-wide and can't be
+                   changed mid-session, this doubles as an extra layer of protection: you
+                   need to both know the password AND be connected under that exact admin
+                   nickname. */
+                if ( (!strncasecmp(MSG, "/op", 3) || !strncasecmp(MSG, "/admin", 6)) && (game.command_op>0))
                   {
                     valid_param=2;
-                    P=MSG+4;
+                    P = (!strncasecmp(MSG,"/admin",6)) ? MSG+7 : MSG+4;
                     if (securityread() < 0)
                       securitywrite();
-                        
-                    if ( (strlen(security.op_password) > 0) && !strcmp(P, security.op_password) )
+
+                    STRG[0]=0;
+                    sscanf(P, "%80s", STRG);
+
+                    if ( (STRG[0]!=0) && check_admin_login(n->nick, STRG) )
                       { /* Passed, this player is OP */
                         n->securitylevel =LEVEL_AUTHOP;
                         tprintf(n->sock,"pline 0 %cYour security level is now: %cAUTHENTICATED OP\xff", GREEN, RED);
@@ -1557,7 +2206,7 @@ void net_connected(struct net_t *n, char *buf)
                                       k = RED;
                                     else
                                       k = BLACK;
-                                    tprintf(n->sock,"pline 0 %c%d. %4d - Team %s\xff", k, i+1, winlist[i].score, winlist[i].name); 
+                                    tprintf(n->sock,"pline 0 %c%d. %4lu - Team %s\xff", k, i+1, winlist[i].score, winlist[i].name);
                                   }
                                 else
                                   {
@@ -1565,7 +2214,7 @@ void net_connected(struct net_t *n, char *buf)
                                       k = RED;
                                     else
                                       k = BLACK;
-                                    tprintf(n->sock,"pline 0 %c%d. %4d - Player %s\xff", k, i+1, winlist[i].score, winlist[i].name); 
+                                    tprintf(n->sock,"pline 0 %c%d. %4lu - Player %s\xff", k, i+1, winlist[i].score, winlist[i].name);
                                   }
                                 i++;
                               }
@@ -1580,304 +2229,33 @@ void net_connected(struct net_t *n, char *buf)
                     valid_param=2;
                     if (passed_level(n,game.command_help))
                       {
+                        char help_is_admin_section_shown;
+                        int help_i;
+                        char help_can_use;
+
                         tprintf(n->sock,"pline 0 HELP - Server Commands - Tetrinet X Modern - v%s.%s\xff", TETVERSION, SERVERBUILD);
-                        tprintf(n->sock,"pline 0 Built-in commands,   %c(*) %crequires 'op',   %c(!) %crequires '/op'\xff", TEAL, BLACK, RED, BLACK);
-                        if (game.command_clear>0)
-                          {
-                            STRG[0]=0;
-                            switch(game.command_clear)
-                              {
-                                case 2: /* Requires OP */
-                                  {
-                                    sprintf(STRG,"%c(*)", TEAL);
-                                    break;
-                                  }
-                                case 3: /* Requires /OP */
-                                  {
-                                    sprintf(STRG,"%c(!)", RED);
-                                    break;
-                                  }
-                              }
-                            tprintf(n->sock,"pline 0   %c/clear\xff", RED);
-                            tprintf(n->sock,"pline 0       %-4s %cClears the winlist\xff", STRG, BLACK);
-                          }
-                        if (game.command_join)
-                          {
-                            STRG[0]=0;
-                            switch(game.command_join)
-                              {
-                                case 2: /* Requires OP */
-                                  {
-                                    sprintf(STRG,"%c(*)", TEAL);
-                                    break;
-                                  }
-                                case 3: /* Requires /OP */
-                                  {
-                                    sprintf(STRG,"%c(!)", RED);
-                                    break;
-                                  }
-                              }
-                            tprintf(n->sock,"pline 0   %c/join %c<#channel|channel number>\xff", RED, BLUE);
-                            tprintf(n->sock,"pline 0       %-4s %cJoins or creates a virtual tetrinet channel\xff", STRG, BLACK);
-                          }
-                        if (game.command_kick)
-                          {
-                            STRG[0]=0;
-                            switch(game.command_kick)
-                              {
-                                case 2: /* Requires OP */
-                                  {
-                                    sprintf(STRG,"%c(*)", TEAL);
-                                    break;
-                                  }
-                                case 3: /* Requires /OP */
-                                  {
-                                    sprintf(STRG,"%c(!)", RED);
-                                    break;
-                                  }
-                              }
-                            tprintf(n->sock,"pline 0   %c/kick %c<playernumber(s)>\xff", RED, BLUE);
-                            tprintf(n->sock,"pline 0       %-4s %cKicks player(s) from the server\xff", STRG, BLACK);
-                          }
-                        if (game.command_list)
-                          {
-                            STRG[0]=0;
-                            switch(game.command_list)
-                              {
-                                case 2: /* Requires OP */
-                                  {
-                                    sprintf(STRG,"%c(*)", TEAL);
-                                    break;
-                                  }
-                                case 3: /* Requires /OP */
-                                  {
-                                    sprintf(STRG,"%c(!)", RED);
-                                    break;
-                                  }
-                              }
-                            tprintf(n->sock,"pline 0   %c/list\xff", RED);
-                            tprintf(n->sock,"pline 0       %-4s %cLists available virtual TetriNET channels\xff", STRG, BLACK);
-                          }
-                        tprintf(n->sock,"pline 0   %c/me %c<action>\xff", RED, BLUE);
-                        tprintf(n->sock,"pline 0            Performs an action\xff");
-                        if (game.command_move)
-                          {
-                            STRG[0]=0;
-                            switch(game.command_move)
-                              {
-                                case 2: /* Requires OP */
-                                  {
-                                    sprintf(STRG,"%c(*)", TEAL);
-                                    break;
-                                  }
-                                case 3: /* Requires /OP */
-                                  {
-                                    sprintf(STRG,"%c(!)", RED);
-                                    break;
-                                  }
-                              }
-                            tprintf(n->sock,"pline 0   %c/move %c<playernumber> <new playernumber>\xff", RED, BLUE);
-                            tprintf(n->sock,"pline 0       %-4s %cMoves a player to a new playernumber\xff", STRG,BLACK);
-                          }
-                    
-                        if (game.command_msg)
-                          {
-                            STRG[0]=0;
-                            switch(game.command_msg)
-                              {
-                                case 2: /* Requires OP */
-                                  {
-                                    sprintf(STRG,"%c(*)", TEAL);
-                                    break;
-                                  }
-                                case 3: /* Requires /OP */
-                                  {
-                                    sprintf(STRG,"%c(!)", RED);
-                                    break;
-                                  }
-                              }
-                            tprintf(n->sock,"pline 0   %c/msg %c<playernumber(s)> <msg>\xff", RED, BLUE);
-                            tprintf(n->sock,"pline 0       %-4s %cPrivately messages player(s)\xff", STRG,BLACK);
-                          }
-                        if (game.command_op)
-                          {
-                            tprintf(n->sock,"pline 0   %c/op %c<op_password>\xff", RED, BLUE);
-                            tprintf(n->sock,"pline 0            Gain AUTHENTICATED OP status\xff");
-                          }
-                        if (game.command_persistant)
-                          {
-                            STRG[0]=0;
-                            switch(game.command_persistant)
-                              {
-                                case 2: /* Requires OP */
-                                  {
-                                    sprintf(STRG,"%c(*)", TEAL);
-                                    break;
-                                  }
-                                case 3: /* Requires /OP */
-                                  {
-                                    sprintf(STRG,"%c(!)", RED);
-                                    break;
-                                  }
-                              }
-                            tprintf(n->sock,"pline 0   %c/persistant %c<0/1>\xff", RED, BLUE);
-                            tprintf(n->sock,"pline 0       %-4s %cPersistant channels are not deleted when the last person leaves\xff", STRG, BLACK);
-                          }
-                        if (game.command_priority)
-                          {
-                            STRG[0]=0;
-                            switch(game.command_priority)
-                              {
-                                case 2: /* Requires OP */
-                                  {
-                                    sprintf(STRG,"%c(*)", TEAL);
-                                    break;
-                                  }
-                                case 3: /* Requires /OP */
-                                  {
-                                    sprintf(STRG,"%c(!)", RED);
-                                    break;
-                                  }
-                              }
-                            tprintf(n->sock,"pline 0   %c/priority %c<channel priority(1-99)>\xff", RED, BLUE);
-                            tprintf(n->sock,"pline 0       %-4s %cNew players join the highest priority channel\xff", STRG, BLACK);
-                          }
-                        if (game.command_reset)
-                          {
-                            STRG[0]=0;
-                            switch(game.command_reset)
-                              {
-                                case 2: /* Requires OP */
-                                  {
-                                    sprintf(STRG,"%c(*)", TEAL);
-                                    break;
-                                  }
-                                case 3: /* Requires /OP */
-                                  {
-                                    sprintf(STRG,"%c(!)", RED);
-                                    break;
-                                  }
-                              }
-                            tprintf(n->sock,"pline 0   %c/reset\xff", RED);
-                            tprintf(n->sock,"pline 0       %-4s %cReload saved game configuration AND persistant channel config\xff", STRG, BLACK);
-                          }
-                        if (game.command_save)
-                          {
-                            STRG[0]=0;
-                            switch(game.command_save)
-                              {
-                                case 2: /* Requires OP */
-                                  {
-                                    sprintf(STRG,"%c(*)", TEAL);
-                                    break;
-                                  }
-                                case 3: /* Requires /OP */
-                                  {
-                                    sprintf(STRG,"%c(!)", RED);
-                                    break;
-                                  }
-                              }
-                            tprintf(n->sock,"pline 0   %c/save\xff", RED);
-                            tprintf(n->sock,"pline 0       %-4s %cAll game configuration AND persistant channel info is saved\xff", STRG, BLACK);
-                          }
-                        if (game.command_set)
-                          {
-                            STRG[0]=0;
-                            switch(game.command_set)
-                              {
-                                case 2: /* Requires OP */
-                                  {
-                                    sprintf(STRG,"%c(*)", TEAL);
-                                    break;
-                                  }
-                                case 3: /* Requires /OP */
-                                  {
-                                    sprintf(STRG,"%c(!)", RED);
-                                    break;
-                                  }
-                              }
-                            tprintf(n->sock,"pline 0   %c/set\xff", RED);
-                            tprintf(n->sock,"pline 0       %-4s %cSet Channel Config. Type %c/set %cHELP\xff", STRG, BLACK,BLUE,RED);
-                          }
-                        if (game.command_topic)
-                          {
-                            STRG[0]=0;
-                            switch(game.command_topic)
-                              {
-                                case 2: /* Requires OP */
-                                  {
-                                    sprintf(STRG,"%c(*)", TEAL);
-                                    break;
-                                  }
-                                case 3: /* Requires /OP */
-                                  {
-                                    sprintf(STRG,"%c(!)", RED);
-                                    break;
-                                  }
-                              }
-                            tprintf(n->sock,"pline 0   %c/topic %c<channel topic>\xff", RED, BLUE);
-                            tprintf(n->sock,"pline 0       %-4s %cChanges the topic of the virtual TetriNET channel\xff", STRG, BLACK);
-                          }
-                        if (game.command_who)
-                          {
-                            STRG[0]=0;
-                            switch(game.command_who)
-                              {
-                                case 2: /* Requires OP */
-                                  {
-                                    sprintf(STRG,"%c(*)", TEAL);
-                                    break;
-                                  }
-                                case 3: /* Requires /OP */
-                                  {
-                                    sprintf(STRG,"%c(!)", RED);
-                                    break;
-                                  }
-                              }
-                            tprintf(n->sock,"pline 0   %c/who\xff", RED);
-                            tprintf(n->sock,"pline 0       %-4s %cLists all logged in players, and what channel they're on\xff", STRG, BLACK);
-                          }
-                    
-                        if (game.command_winlist)
-                          {
-                            STRG[0]=0;
-                            switch(game.command_winlist)
-                              {
-                                case 2: /* Requires OP */
-                                  {
-                                    sprintf(STRG,"%c(*)", TEAL);
-                                    break;
-                                  }
-                                case 3: /* Requires /OP */
-                                  {
-                                    sprintf(STRG,"%c(!)", RED);
-                                    break;
-                                  }
-                              }
-                            tprintf(n->sock,"pline 0   %c/winlist %c[n]\xff", RED, BLUE);
-                            tprintf(n->sock,"pline 0       %-4s %cDisplays the top n players\xff",STRG,BLACK);
-                          }
 
-                          if (game.command_motd)
+                        help_is_admin_section_shown = 0;
+                        for (help_i=0; help_table[help_i].usage != NULL; help_i++)
                           {
-                            STRG[0]=0;
-                            switch(game.command_motd)
-                              {
-                                case 2: /* Requires OP */
-                                  {
-                                    sprintf(STRG,"%c(*)", TEAL);
-                                    break;
-                                  }
-                                case 3: /* Requires /OP */
-                                  {
-                                    sprintf(STRG,"%c(!)", RED);
-                                    break;
-                                  }
-                              }
-                            tprintf(n->sock,"pline 0   %c/motd\xff", RED, BLUE);
-                            tprintf(n->sock,"pline 0       %-4s %cDisplays the welcome message\xff",STRG,BLACK);
-                          }
+                            if (help_table[help_i].custom_check != NULL)
+                              help_can_use = help_table[help_i].custom_check(n);
+                            else if (help_table[help_i].level_ptr == NULL)
+                              help_can_use = 1;
+                            else
+                              help_can_use = passed_level(n, *(help_table[help_i].level_ptr));
 
+                            if (!help_can_use) continue;
+
+                            if (help_table[help_i].admin_section && !help_is_admin_section_shown)
+                              {
+                                tprintf(n->sock,"pline 0 %c--- Admin Commands ---\xff", RED);
+                                help_is_admin_section_shown = 1;
+                              }
+
+                            tprintf(n->sock,"pline 0   %c%s\xff", RED, help_table[help_i].usage);
+                            tprintf(n->sock,"pline 0       %c%s\xff", BLACK, help_table[help_i].description);
+                          }
                       }
                     else
                       tprintf(n->sock,"pline 0 %cYou do NOT have access to that command!\xff",RED);
@@ -1952,12 +2330,26 @@ void net_connected(struct net_t *n, char *buf)
       {
         valid_param=2;
         s = sscanf(PARAM, "%d %d", &num, &num2);
-        if ( (s >= 2) && is_op(n) && (n->channel->status == STATE_INGAME) && (num2==n->gameslot) && ( (num==0)||(num==1)) )
+        /* BUGFIX: pause used to (a) gate on STATE_INGAME only and (b) assign
+           the resulting status inverted -- pausing (num==1) left the channel
+           INGAME while unpausing (num==0) set it to PAUSED. Net effect: a
+           game could be paused and unpaused exactly once, after which the
+           channel was stuck in STATE_PAUSED while actually running, so every
+           further pause/unpause AND "stop game" (all gated on the channel's
+           status) were silently ignored until the game ended on its own.
+           It also left the sudden-death timer ticking during a pause.
+           Correct semantics (num==1=pause, num==0=unpause, matching the
+           "pause 1" the join code sends into a paused channel): accept
+           num==1 only while INGAME and set PAUSED; accept num==0 only while
+           PAUSED and set INGAME. */
+        if ( (s >= 2) && is_op(n) && (num2==n->gameslot)
+             && ( ((num==1) && (n->channel->status == STATE_INGAME))
+               || ((num==0) && (n->channel->status == STATE_PAUSED)) ) )
           {
             if (num==1)
               lvprintf(4,"#%s-%s pauses game\n",n->channel->name,n->nick);
             else
-              lvprintf(5,"#%2-%s unpauses game\n",n->channel->name,n->nick);
+              lvprintf(5,"#%s-%s unpauses game\n",n->channel->name,n->nick);
               
             
             valid_param=1;
@@ -1968,7 +2360,7 @@ void net_connected(struct net_t *n, char *buf)
                   tprintf(nsock->sock,"pause %d\xff", num);
                 nsock=nsock->next;
               }
-            if (num==0)
+            if (num==1)
               n->channel->status=STATE_PAUSED;
             else
               n->channel->status=STATE_INGAME;
@@ -2082,53 +2474,71 @@ void net_connected(struct net_t *n, char *buf)
                       }
                     nsock=nsock->next;
                   }
-                if ( (num2 <= 1) && (ns1!=NULL) )
+                if (num2 <= 1)
                   { /* 1 or less different teams playing. Stop the game, and take score */
-                    if (ns1->type == NET_CONNECTED)
-                      {
-                        if (strlen(ns1->team) > 0)
-                          { /* Team won, so add score to team */
-                            updatewinlist(ns1->team,'t',3);
+                    if (ns1!=NULL)
+                      { /* BUGFIX: there was another player/team left -> declare a winner as before */
+                        if (ns1->type == NET_CONNECTED)
+                          {
+                            if (strlen(ns1->team) > 0)
+                              { /* Team won, so add score to team */
+                                updatewinlist(ns1->team,'t',3);
+                                updatewinliststats(ns1->team,'t',ns1->level);
+                              }
+                            else
+                              { /* Player won, so add score to player name */
+                                updatewinlist(ns1->nick,'p',3);
+                                updatewinliststats(ns1->nick,'p',ns1->level);
+                              }
                           }
-                        else
-                          { /* Player won, so add score to player name */
-                            updatewinlist(ns1->nick,'p',3);
+                        n->channel->status=STATE_ONLINE;
+                        nsock=n->channel->net;
+                        while (nsock!=NULL)
+                          {
+                            if ( (nsock->type == NET_CONNECTED))
+                              {
+                                tprintf(nsock->sock,"endgame\xff");
+                                tprintf(nsock->sock,"playerwon %d\xff", ns1->gameslot);
+                                nsock->status=STAT_NOTPLAYING;
+                                nsock->timeout=game.timeout_outgame;
+                                /* Send every playing field */
+                                
+                                ns2=n->channel->net;
+                                while (ns2!=NULL)
+                                  {
+                                    if ( (ns2!=nsock) && (ns2->type == NET_CONNECTED))
+                                      sendfield(nsock,ns2);
+                                    ns2=ns2->next;
+                                  }
+                            
+                                /*!!! ADD-IN: Server anounces winner */
+                                if ( (ns1->type == NET_CONNECTED) && n->channel->serverannounce)
+                                  {
+                                    if ( strlen(ns1->team) > 0)
+                                      { /* a team won */
+                                        tprintf(nsock->sock,"pline 0 %c-=== Team %s%c WON ===-\xff", BOLD, ns1->team, BLACK);
+                                      }
+                                    else
+                                      { /* a player won */
+                                        tprintf(nsock->sock,"pline 0 %c-=== Player %s%c WON ===-\xff", BOLD, ns1->nick, BLACK);
+                                      }
+                                  }
+                              }
+                            nsock=nsock->next;
                           }
                       }
-                    n->channel->status=STATE_ONLINE;
-                    nsock=n->channel->net;
-                    while (nsock!=NULL)
-                      {
-                        if ( (nsock->type == NET_CONNECTED))
+                    else
+                      { /* BUGFIX: lone player game (no opponent left connected/playing).
+                           Previously the endgame block was skipped entirely because ns1
+                           stayed NULL, leaving the channel stuck in STATE_INGAME forever. */
+                        n->channel->status=STATE_ONLINE;
+                        n->status=STAT_NOTPLAYING;
+                        n->timeout=game.timeout_outgame;
+                        tprintf(n->sock,"endgame\xff");
+                        if (n->channel->serverannounce)
                           {
-                            tprintf(nsock->sock,"endgame\xff");
-                            tprintf(nsock->sock,"playerwon %d\xff", ns1->gameslot);
-                            nsock->status=STAT_NOTPLAYING;
-                            nsock->timeout=game.timeout_outgame;
-                            /* Send every playing field */
-                            
-                            ns2=n->channel->net;
-                            while (ns2!=NULL)
-                              {
-                                if ( (ns2!=nsock) && (ns2->type == NET_CONNECTED))
-                                  sendfield(nsock,ns2);
-                                ns2=ns2->next;
-                              }
-                        
-                            /*!!! ADD-IN: Server anounces winner */
-                            if ( (ns1->type == NET_CONNECTED) && n->channel->serverannounce)
-                              {
-                                if ( strlen(ns1->team) > 0)
-                                  { /* a team won */
-                                    tprintf(nsock->sock,"pline 0 %c-=== Team %s%c WON ===-\xff", BOLD, ns1->team, BLACK);
-                                  }
-                                else
-                                  { /* a player won */
-                                    tprintf(nsock->sock,"pline 0 %c-=== Player %s%c WON ===-\xff", BOLD, ns1->nick, BLACK);
-                                  }
-                              }
+                            tprintf(n->sock,"pline 0 %c-=== Game Over - no winner ===-%c\xff", BOLD, BLACK);
                           }
-                        nsock=nsock->next;
                       }
                     writewinlist();
                     sendwinlist(n->channel,NULL);	/* Send to all */
@@ -2170,6 +2580,11 @@ void net_connected(struct net_t *n, char *buf)
         if ( (n->channel->status==STATE_INGAME) && (num==n->gameslot) && (n->status == STAT_PLAYING) )
           {
             valid_param=1;
+            /* BUGFIX: this value was only ever relayed to other players,
+               never actually stored -- n->level stayed permanently unused.
+               Needed now so the extended (victory-only) winlist metrics
+               can record the level a player reached when they win. */
+            n->level = num2;
             nsock=n->channel->net;
             while (nsock!=NULL)
               {
@@ -2205,7 +2620,10 @@ void net_connected(struct net_t *n, char *buf)
       {
         valid_param=2;
         s = sscanf(PARAM, "%d %d %600[^\n\r]", &num, &num2, MSG);
-        if ( (s >= 2) && is_op(n) && ( ((num==1) && (n->channel->status == STATE_ONLINE)) || ((num==0) && (n->channel->status == STATE_INGAME)) ) && (num2==n->gameslot) && ( (num == 1) || (num == 0)) )
+        /* Stopping (num==0) is now allowed from STATE_PAUSED as well as
+           STATE_INGAME, so an op can stop a paused game directly instead of
+           being forced to unpause it first. */
+        if ( (s >= 2) && is_op(n) && ( ((num==1) && (n->channel->status == STATE_ONLINE)) || ((num==0) && ((n->channel->status == STATE_INGAME) || (n->channel->status == STATE_PAUSED))) ) && (num2==n->gameslot) && ( (num == 1) || (num == 0)) )
           {
             valid_param=1;
             if (num==1)
@@ -2377,6 +2795,27 @@ void net_waitingforteam(struct net_t *n, char *buf)
     lvprintf(2,"#%s-%s New connection\n", n->channel->name,n->nick);
   }
 
+/* Named colours a game.motd line can request via a leading "[NAME]" tag
+   (see read_motd() below). Names match the #define's in main.h. */
+struct motd_colour_t { const char *name; int code; };
+static const struct motd_colour_t motd_colours[] = {
+  { "BLACK",    BLACK },
+  { "DARKGRAY", DARKGRAY },
+  { "SILVER",   SILVER },
+  { "NAVY",     NAVY },
+  { "BLUE",     BLUE },
+  { "CYAN",     CYAN },
+  { "GREEN",    GREEN },
+  { "NEON",     NEON },
+  { "TEAL",     TEAL },
+  { "BROWN",    BROWN },
+  { "RED",      RED },
+  { "MAGENTA",  MAGENTA },
+  { "VIOLET",   VIOLET },
+  { "YELLOW",   YELLOW },
+  { "WHITE",    WHITE },
+};
+
 /* Read the MOTD file */
 void read_motd(struct net_t *n)
 {
@@ -2384,32 +2823,84 @@ void read_motd(struct net_t *n)
   char motd[1024];
 
   file_in = fopen(FILE_MOTD,"r");
- 
+
   /* File exists, so read it */
   if (file_in != NULL)
   {
-    while (!feof(file_in))
+    /* Blank line before the MOTD content. Sent from code, not as a blank
+       line in game.motd itself: an empty line there would fail to match
+       "%[^\n]" (it requires at least one character), silently ending the
+       read loop right there and skipping everything after it. */
+    tprintf(n->sock,"pline 0 \xff");
+
+    /* BUGFIX: this used to loop on "!feof(file_in)", which only becomes
+       true AFTER a read attempt has already run past the last line -- so
+       every call did one extra, guaranteed-to-fail fscanf() beyond the
+       real content, and that ordinary end-of-file was (wrongly) treated
+       as a fatal I/O error. fatal() kills every connected socket and
+       exit()s the WHOLE server process, so this crashed the entire
+       server on every single client connection (any connection that got
+       far enough to be sent the MOTD), not just the one being served.
+       Looping on the fscanf() result itself avoids the spurious extra
+       iteration entirely. */
+    while (fscanf(file_in,"%1023[^\n]\n", motd) == 1)
     {
-      
-      if(fscanf(file_in,"%1023[^\n]\n", motd) != 1)
+      char *text;
+      int colour, mlen, i;
+
+      /* Strip a trailing '\r' (game.motd saved/edited with CRLF line
+         endings): "%[^\n]" stops at '\n' but includes a preceding '\r'
+         as an ordinary character, which would otherwise be sent
+         verbatim, embedded in the "pline" packet right before its
+         terminating '\xff'. */
+      mlen = strlen(motd);
+      if (mlen>0 && motd[mlen-1]=='\r') motd[mlen-1]='\0';
+
+      /* Optional per-line colour: a leading "[NAME]" tag (NAME one of
+         motd_colours[] above) picks the colour for that line and is
+         stripped before sending; anything else -- no tag, or an
+         unrecognised name -- falls back to the original plain BLUE,
+         sent exactly as written (keeps old, tag-less motd files working
+         unchanged). */
+      text = motd;
+      colour = BLUE;
+      if (motd[0]=='[')
       {
-        lvprintf(4,"ERROR: Failed to read MOTD file. Check folder permissions or remove the file.\n");
-        fatal("Failed to read MOTD file. Check folder permissions or remove the file.",0);
+        char *close = strchr(motd, ']');
+        if (close != NULL)
+        {
+          *close = '\0';
+          for (i=0; i < (int)(sizeof(motd_colours)/sizeof(motd_colours[0])); i++)
+          {
+            if (!strcasecmp(motd+1, motd_colours[i].name))
+            {
+              colour = motd_colours[i].code;
+              text = close+1;
+              break;
+            }
+          }
+          if (text == motd) *close = ']'; /* not a recognised tag -- restore and send as-is */
+        }
       }
-      else {
-        tprintf(n->sock,"pline 0 %c%c%s\xff", BOLD, BLUE, motd);
-      }
+
+      tprintf(n->sock,"pline 0 %c%c%s\xff", BOLD, colour, text);
     }
-  
+
+    /* Blank line after the MOTD content, mirroring the one before it. */
+    tprintf(n->sock,"pline 0 \xff");
+
     lvprintf(4,"File game.motd read successfully.\n");
+    fclose(file_in);
   }
   else
   {
-    lvprintf(4,"ERROR: Failed to read MOTD file. Check folder permissions or remove the file.\n");
-    fatal("Failed to read MOTD file. Check folder permissions or remove the file.",0);
+    /* BUGFIX: this used to call fatal(), which kills EVERY connected socket
+       and exit()s the whole server -- just because one optional file
+       (game.motd) couldn't be opened (e.g. deleted at runtime). The MOTD is
+       cosmetic; a missing/unreadable one should never take the server down.
+       Log it and carry on serving this (and every other) client. */
+    lvprintf(2,"WARNING: Could not read MOTD file %s -- skipping MOTD for this client.\n", FILE_MOTD);
   }
-
-  fclose(file_in);
 }
 
 /* Write a new the MOTD file with defaults */
@@ -2581,8 +3072,20 @@ void net_telnet_init(struct net_t *n, char *buf)
     if (i < 2)
       {/* To few conversions - Player dies*/
         lvprintf(9,"%s: Disconnected due to invalid tetrisstart: %s\n",n->host,dec);
+        free(dec);
         killsock(n->sock); lostnet(n);
+        /* BUGFIX: this path was missing a return, so after lostnet() had
+           already free()d n, execution fell through into every check below
+           (nickname "server", nick ban, version, duplicate nick, ...) --
+           a use-after-free on a connection already killed. Every other
+           equivalent bail-out in this function returns right after
+           killsock()+lostnet(); this one just didn't. */
+        return;
       }
+    /* dec (malloc'd by tet_dec2str) is no longer needed past this point --
+       n->nick / n->version were already parsed out of it above. Freed here
+       so every subsequent early return below doesn't leak it. */
+    free(dec);
       
     /* Ensure a valid nickname */
     if (!strcasecmp(n->nick,"server"))
@@ -2590,6 +3093,25 @@ void net_telnet_init(struct net_t *n, char *buf)
         lvprintf(9,"%s Disconnected due to invalid nickname: %s\n",n->host,n->nick);
         tprintf(n->sock, "noconnecting Nickname %s not allowed!\xff", n->nick);
         killsock(n->sock); lostnet(n);
+        /* BUGFIX: this was missing a return, so execution fell through
+           into every check below (nickname ban, version check, duplicate
+           nickname, channel assignment, ...) on a connection that had
+           already been told "not allowed" and had its socket killed --
+           every other equivalent check in this function already returns
+           immediately after killsock()+lostnet(), this one just didn't. */
+        return;
+      }
+
+    /* Ensure this nickname isn't banned (IP bans are already checked much
+       earlier, in net_telnet(), right after accept() -- this is the
+       earliest point nickname bans CAN be checked, since the nickname
+       itself only becomes known once the INIT string above is parsed) */
+    if (is_nick_banned(n->nick))
+      {
+        lvprintf(9,"%s: Disconnected because nickname '%s' is banned\n",n->host,n->nick);
+        tprintf(n->sock, "noconnecting Nickname %s is banned from this server!\xff", n->nick);
+        killsock(n->sock); lostnet(n);
+        return;
       }
     
     /* Ensure that Version is OK */
@@ -2675,11 +3197,14 @@ void net_telnet(struct net_t *n, char *buf)
     net->status=STAT_NOTPLAYING;
     sprintf(net->host,"%s", s);
     if (strlen(s) == 0)
-      { /* No resolved host... copy IP */
-        sprintf(n1,"%lu", (unsigned long)(n->addr&0xff000000)/(unsigned long)0x1000000);
-        sprintf(n2,"%lu", (unsigned long)(n->addr&0x00ff0000)/(unsigned long)0x10000);
-        sprintf(n3,"%lu", (unsigned long)(n->addr&0x0000ff00)/(unsigned long)0x100);
-        sprintf(n4,"%lu", (unsigned long)n->addr&0x000000ff);
+      { /* No resolved host... copy IP. BUGFIX: this built the dotted-quad
+           from n->addr (the LISTENING socket's own address) instead of
+           net->addr (the address of the client that just connected), so an
+           unresolved client was logged/displayed with the server's own IP. */
+        sprintf(n1,"%lu", (unsigned long)(net->addr&0xff000000)/(unsigned long)0x1000000);
+        sprintf(n2,"%lu", (unsigned long)(net->addr&0x00ff0000)/(unsigned long)0x10000);
+        sprintf(n3,"%lu", (unsigned long)(net->addr&0x0000ff00)/(unsigned long)0x100);
+        sprintf(n4,"%lu", (unsigned long)net->addr&0x000000ff);
         sprintf(net->host,"%s.%s.%s.%s",n1,n2,n3,n4);
       }
       
@@ -2693,8 +3218,9 @@ void net_telnet(struct net_t *n, char *buf)
         return;
       }
       
-    /* Is this person banned? */
-    if (is_banned(net))
+    /* Is this person's IP banned? (nickname bans are checked later, in
+       net_connected(), once we actually know what nickname they're using) */
+    if (is_ip_banned(net->addr))
       {
         tprintf(net->sock,"noconnecting You are banned from server!\xff");
         killsock(net->sock);
@@ -2942,26 +3468,30 @@ void net_eof(int z)
   
 void got_term(int z)
   {
-    struct net_t *nsock;
-    struct channel_t *chan;
+    struct net_t *nsock, *nextsock;
+    struct channel_t *chan, *nextchan;
 
     lvprintf(1,"Got TERM Signal - Quitting\n");
-    /* Kill all our socks */
-    nsock=NULL;
+    /* Kill all our socks. BUGFIX: this used to call lostnet(nsock) (which
+       free()s nsock, and may also free the whole channel when it was the
+       last player) and THEN dereference nsock->next / chan->next -- a
+       use-after-free walk of both lists. On shutdown there is nothing to
+       gain from lostnet()'s bookkeeping (notifying other players, freeing
+       memory moments before exit()): just close the sockets, capturing the
+       "next" pointers BEFORE anything can invalidate them. */
     chan=chanlist;
     while (chan!=NULL)
       {
+        nextchan=chan->next;
         nsock=chan->net;
         while (nsock!=NULL)
           {
+            nextsock=nsock->next;
             if (nsock->type != NET_FREE)
-              {
-                killsock(nsock->sock);
-                lostnet(nsock);
-              }
-            nsock=nsock->next;
+              killsock(nsock->sock);
+            nsock=nextsock;
           }
-        chan=chan->next;
+        chan=nextchan;
       }
       
     /* Write winlist etc... */
@@ -3085,26 +3615,55 @@ int main(int argc, char *argv[])
     
     printf("\nTetrinet X Modern - New GNU TetriNET Server\n");
     printf("More info: https://github.com/agcorreatech/tetrinetx-modern\n\n");
-        
+
+    /* Startup debug: each step below is logged (stdout + game.log) BEFORE
+       it runs, so if the process dies mid-startup, the last "BOOT:" line
+       printed tells you exactly which step failed. All of this happens
+       before the daemonizing fork(), so stdout is still attached. */
+    boot_debug("Starting Tetrinet X Modern v%s.%s (pid %d)", TETVERSION, SERVERBUILD, getpid());
+    boot_check_environment();
+
     /* Initialise */
+    boot_debug("Step 1/13: init_main (signal handlers, log header)");
     init_main();
+    boot_debug("Step 2/13: init_game (defaults + reading/creating game.conf)");
     init_game();
+    boot_debug("Step 3/13: init_net (network buffers)");
     init_net();
+    boot_debug("Step 4/13: init_telnet_port (binding game port %d -- fails here if the port is already in use)", TELNET_PORT);
     init_telnet_port();
     /*init_query_port();*/
+    boot_debug("Step 5/13: init_winlist");
     init_winlist();
+    boot_debug("Step 6/13: init_winliststats");
+    init_winliststats();
+    boot_debug("Step 7/13: init_security");
     init_security();
+    boot_debug("Step 8/13: init_banlist");
+    init_banlist();
+    boot_debug("Step 9/13: readwinlist (game.winlist, if present)");
     readwinlist();
+    boot_debug("Step 10/13: readwinliststats (game.winliststats, if present)");
+    readwinliststats();
+    boot_debug("Step 11/13: readbanlist (game.ban, if present)");
+    readbanlist();
+    boot_debug("Step 12/13: write_motd (game.motd)");
     write_motd();
 
+    boot_debug("Step 13/13: securityread (game.secure, creating it if missing)");
     if (securityread() < 0)
       securitywrite();
-    
+
+    boot_debug("All startup steps completed. Daemonizing now (forking to background;");
+    boot_debug("from this point on, output goes to %s only). Watch for the", FILE_LOG);
+    boot_debug("'Wrote PID to file' line in the log to confirm the daemon is up.");
+
     /* Now fork out, and start a new process group */
     /* Fork. If we are the parent, quit, if child, continue */
     if ((forknum=fork()) == -1)
       {
-        printf("Error: Unable to fork new process\n");
+        printf("BOOT: FATAL: Unable to fork new process (%s)\n", strerror(errno));
+        lvprintf(0,"BOOT: FATAL: Unable to fork new process\n");
         exit(5);
       }
     if (forknum > 0) 
@@ -3155,4 +3714,4 @@ int main(int argc, char *argv[])
           
         
       }
-  }
+  }

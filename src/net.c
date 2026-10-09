@@ -48,27 +48,53 @@ int expmem_net()
   return tot;
 }
 
-/* puts full hostname in s */
-void getmyhostname(s)
-char *s;
+/* puts full hostname in s (buffer of size len). BUGFIX (hardening,
+   related to CVE-1999-1060): all copies here used to be unbounded
+   strcpy() calls. This is not the remotely-triggerable CVE-1999-1060
+   path (that one is hostnamefromip(), already bounded), but it is the
+   same class of bug applied to the server's own hostname resolution,
+   so it is bounded here too for consistency/defense-in-depth. */
+void getmyhostname(s,len)
+char *s; int len;
 {
   struct hostent *hp; char *p;
  
+  if (len<1) return;
   p=getenv("HOSTNAME"); if (p!=NULL) {
-    strcpy(s,p); if (strchr(s,'.')!=NULL) return;
+    strncpy(s,p,len-1); s[len-1]='\0';
+    if (strchr(s,'.')!=NULL) return;
   }
-  gethostname(s,80);
+  gethostname(s,(len<80?len:80));
+  s[len-1]='\0';
   if (strchr(s,'.')!=NULL) return;
   hp=gethostbyname(s);
-  if (hp==NULL)
-    fatal("Hostname self-lookup failed.",0);
-  strcpy(s,hp->h_name);
-  if (strchr(s,'.')!=NULL) return;
-  if (hp->h_aliases[0] == NULL)
-    fatal("Can't determine your hostname!",0);
-  strcpy(s,hp->h_aliases[0]);
-  if (strchr(s,'.')==NULL)
-    fatal("Can't determine your hostname!",0);   
+  if (hp!=NULL)
+    {
+      strncpy(s,hp->h_name,len-1); s[len-1]='\0';
+      if (strchr(s,'.')!=NULL) return;
+      if (hp->h_aliases[0] != NULL)
+        {
+          strncpy(s,hp->h_aliases[0],len-1); s[len-1]='\0';
+          if (strchr(s,'.')!=NULL) return;
+        }
+    }
+  /* BUGFIX: this used to call fatal() and kill the whole server just
+     because the machine has no FQDN configured (no domain in
+     /etc/hosts, no reverse DNS, etc) -- very common on containers,
+     sandboxes, and minimal setups. That's a startup message/log
+     detail, not something worth refusing to run over. Fall back to
+     whatever plain hostname we already have (from the env var or
+     gethostname() above), or "localhost" if even that came back
+     empty, and keep going. */
+  if (s[0]=='\0')
+    {
+      strncpy(s,"localhost",len-1); s[len-1]='\0';
+    }
+  /* Log-only: not printed to stdout, so it doesn't clutter the terminal
+     (or `docker logs`/systemd journal) on every normal startup -- this
+     is expected on any host without a configured FQDN, not an error.
+     Still recorded in game.log (if game.verbose>=2) for troubleshooting. */
+  lvprintf(2,"Warning: could not determine a fully qualified hostname; using '%s' instead.\n", s);
 }
 
 /* get my ip number */
@@ -545,8 +571,8 @@ void tprintf(int sock, char *format, ...)
   va_list va; static char SBUF2[1050];
   
   va_start(va,format);
-  
-  vsprintf(SBUF2,format,va);
+
+  vsnprintf(SBUF2,sizeof(SBUF2),format,va);
   if (strlen(SBUF2)>1022)
  {  
     SBUF2[1022]=0;   /* server can only take so much */

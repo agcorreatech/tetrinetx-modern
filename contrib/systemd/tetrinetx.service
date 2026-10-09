@@ -1,0 +1,34 @@
+[Unit]
+Description=TetriNET X Modern Server (tetrinetx)
+Documentation=https://github.com/agcorreatech/tetrinetx-modern
+After=network.target
+
+[Service]
+# O servidor faz o proprio fork/daemonize (double fork) e grava o PID em
+# WorkingDirectory/game.pid (ver src/config.h -> FILE_PID e src/main.c -> writepid()).
+# Por isso o tipo correto aqui e "forking", nao "simple".
+Type=forking
+PIDFile=/opt/tetrinetx/game.pid
+
+WorkingDirectory=/opt/tetrinetx
+ExecStart=/opt/tetrinetx/tetrix-modern.linux
+
+# Usuario/grupo dedicados, sem privilegios de login, criados pelo install-tetrinetx-service.sh
+User=tetrinetx
+Group=tetrinetx
+
+# O processo daemoniza sozinho: da tempo para ele escrever o PID antes do
+# systemd considerar o start como concluido/falho.
+TimeoutStartSec=10
+Restart=on-failure
+RestartSec=5
+
+# Hardening basico (a porta padrao 31457 nao e privilegiada, entao nao
+# precisamos de root nem de CAP_NET_BIND_SERVICE)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
